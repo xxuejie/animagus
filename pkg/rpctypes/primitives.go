@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -31,6 +32,43 @@ func (data Bytes) MarshalJSON() ([]byte, error) {
 	copy(result[0:2], []byte("0x"))
 	hex.Encode(result[2:], data)
 	return json.Marshal(string(result))
+}
+
+type VarBytes []byte
+
+func (data *VarBytes) UnmarshalJSON(b []byte) error {
+	var d Bytes
+	if err := json.Unmarshal(b, &d); err != nil {
+		return err
+	}
+	*data = VarBytes(d)
+	return nil
+}
+
+func (data VarBytes) MarshalJSON() ([]byte, error) {
+	return json.Marshal(Bytes(data))
+}
+
+type Uint128 struct {
+	V *big.Int
+}
+
+func (u *Uint128) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	i := new(big.Int)
+	_, success := i.SetString(s, 0)
+	if !success {
+		return fmt.Errorf("Setting uint128 failure!")
+	}
+	u.V = i
+	return nil
+}
+
+func (u Uint128) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fmt.Sprintf("0x%s", u.V.Text(16)))
 }
 
 type Uint64 uint64
@@ -112,8 +150,8 @@ func (h ProposalShortId) MarshalJSON() ([]byte, error) {
 type ScriptHashType byte
 
 const (
-	Data ScriptHashType = iota
-	Type
+	Data ScriptHashType = 0
+	Type ScriptHashType = 1
 )
 
 func (t *ScriptHashType) UnmarshalJSON(b []byte) error {
@@ -148,8 +186,8 @@ func (t ScriptHashType) MarshalJSON() ([]byte, error) {
 type DepType byte
 
 const (
-	Code DepType = iota
-	DepGroup
+	Code     DepType = 0
+	DepGroup DepType = 1
 )
 
 func (t *DepType) UnmarshalJSON(b []byte) error {

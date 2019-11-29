@@ -13,7 +13,7 @@ type CellInput struct {
 type Script struct {
 	CodeHash Hash           `json:"code_hash"`
 	HashType ScriptHashType `json:"hash_type"`
-	Args     Bytes          `json:"args"`
+	Args     VarBytes       `json:"args"`
 }
 
 type CellOutput struct {
@@ -27,29 +27,36 @@ type CellDep struct {
 	DepType  DepType  `json:"dep_type"`
 }
 
-type Transaction struct {
+type RawTransaction struct {
 	Version     Uint32       `json:"version"`
 	CellDeps    []CellDep    `json:"cell_deps"`
 	HeaderDeps  []Hash       `json:"header_deps"`
 	Inputs      []CellInput  `json:"inputs"`
 	Outputs     []CellOutput `json:"outputs"`
-	Witnesses   []Bytes      `json:"witnesses"`
-	OutputsData []Bytes      `json:"outputs_data"`
+	OutputsData []VarBytes   `json:"outputs_data"`
 }
 
-type Header struct {
+type Transaction struct {
+	RawTransaction
+	Witnesses []VarBytes `json:"witnesses"`
+}
+
+type RawHeader struct {
 	Version          Uint32 `json:"version"`
 	CompactTarget    Uint32 `json:"compact_target"`
-	ParentHash       Hash   `json:"parent_hash"`
 	Timestamp        Uint64 `json:"timestamp"`
 	Number           Uint64 `json:"number"`
 	Epoch            Uint64 `json:"epoch"`
+	ParentHash       Hash   `json:"parent_hash"`
 	TransactionsRoot Hash   `json:"transactions_root"`
 	ProposalsHash    Hash   `json:"proposals_hash"`
 	UnclesHash       Hash   `json:"uncles_hash"`
 	Dao              Bytes  `json:"dao"`
-	// TODO: deal with Uint128 later
-	Nonce Bytes `json:"nonce"`
+}
+
+type Header struct {
+	RawHeader
+	Nonce Uint128 `json:"nonce"`
 }
 
 type UncleBlock struct {
@@ -62,4 +69,15 @@ type Block struct {
 	Uncles       []UncleBlock      `json:"uncles"`
 	Transactions []Transaction     `json:"transactions"`
 	Proposals    []ProposalShortId `json:"proposals"`
+}
+
+type CellbaseWitness struct {
+	Lock    Script   `json:"lock"`
+	Message VarBytes `json:"message"`
+}
+
+type WitnessArgs struct {
+	Lock       *VarBytes `json:"lock,omitempty"`
+	InputType  *VarBytes `json:"input_type,omitempty"`
+	OutputType *VarBytes `json:"output_type,omitempty"`
 }

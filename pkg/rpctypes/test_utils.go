@@ -28,6 +28,6 @@ func assertBytes(t *testing.T, name string, value []byte, expected string) {
 		t.Fatal(err)
 	}
 	if bytes.Compare(value, expectedBytes) != 0 {
-		t.Errorf("Field %s has incorrect value! Expected: %s", name, expected)
+		t.Errorf("Field %s has incorrect value! Expected: %s, actual: 0x%s", name, expected, hex.EncodeToString(value))
 	}
 }
