@@ -13,7 +13,7 @@ type CellInput struct {
 type Script struct {
 	CodeHash Hash           `json:"code_hash"`
 	HashType ScriptHashType `json:"hash_type"`
-	Args     VarBytes       `json:"args"`
+	Args     Bytes          `json:"args"`
 }
 
 type CellOutput struct {
@@ -33,12 +33,12 @@ type RawTransaction struct {
 	HeaderDeps  []Hash       `json:"header_deps"`
 	Inputs      []CellInput  `json:"inputs"`
 	Outputs     []CellOutput `json:"outputs"`
-	OutputsData []VarBytes   `json:"outputs_data"`
+	OutputsData []Bytes      `json:"outputs_data"`
 }
 
 type Transaction struct {
 	RawTransaction
-	Witnesses []VarBytes `json:"witnesses"`
+	Witnesses []Bytes `json:"witnesses"`
 }
 
 type RawHeader struct {
@@ -51,7 +51,7 @@ type RawHeader struct {
 	TransactionsRoot Hash   `json:"transactions_root"`
 	ProposalsHash    Hash   `json:"proposals_hash"`
 	UnclesHash       Hash   `json:"uncles_hash"`
-	Dao              Bytes  `json:"dao"`
+	Dao              Raw    `json:"dao"`
 }
 
 type Header struct {
@@ -72,12 +72,12 @@ type Block struct {
 }
 
 type CellbaseWitness struct {
-	Lock    Script   `json:"lock"`
-	Message VarBytes `json:"message"`
+	Lock    Script `json:"lock"`
+	Message Bytes  `json:"message"`
 }
 
 type WitnessArgs struct {
-	Lock       *VarBytes `json:"lock,omitempty"`
-	InputType  *VarBytes `json:"input_type,omitempty"`
-	OutputType *VarBytes `json:"output_type,omitempty"`
+	Lock       *Bytes `json:"lock,omitempty"`
+	InputType  *Bytes `json:"input_type,omitempty"`
+	OutputType *Bytes `json:"output_type,omitempty"`
 }

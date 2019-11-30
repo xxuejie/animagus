@@ -39,12 +39,12 @@ type CoreSerializer interface {
 	SerializeToCore(writer io.Writer) error
 }
 
-func (b Bytes) SerializeToCore(writer io.Writer) error {
+func (b Raw) SerializeToCore(writer io.Writer) error {
 	_, err := writer.Write(b[:])
 	return err
 }
 
-func (b VarBytes) SerializeToCore(writer io.Writer) error {
+func (b Bytes) SerializeToCore(writer io.Writer) error {
 	err := binary.Write(writer, binary.LittleEndian, uint32(len(b)))
 	if err != nil {
 		return err
@@ -152,7 +152,7 @@ func (c CellOutput) SerializeToCore(writer io.Writer) error {
 		items[2] = *c.Type
 	} else {
 		// Empty slice here
-		items[2] = Bytes([]byte{})
+		items[2] = Raw([]byte{})
 	}
 	return serializeTable(items, writer)
 }
@@ -208,7 +208,7 @@ func (v cellOutputDynVec) SerializeToCore(writer io.Writer) error {
 	return serializeTable(items, writer)
 }
 
-type varbytesDynVec []VarBytes
+type varbytesDynVec []Bytes
 
 func (v varbytesDynVec) SerializeToCore(writer io.Writer) error {
 	items := make([]CoreSerializer, len(v))
@@ -246,7 +246,7 @@ func (t RawTransaction) SerializeToCore(writer io.Writer) error {
 	}
 	items := make([]CoreSerializer, len(buffers))
 	for i, b := range buffers {
-		items[i] = Bytes(b.Bytes())
+		items[i] = Raw(b.Bytes())
 	}
 	return serializeTable(items, writer)
 }
@@ -259,7 +259,7 @@ func (t Transaction) SerializeToCore(writer io.Writer) error {
 	}
 	return serializeTable([]CoreSerializer{
 		t.RawTransaction,
-		Bytes(witnessBuffer.Bytes()),
+		Raw(witnessBuffer.Bytes()),
 	}, writer)
 }
 
@@ -305,7 +305,7 @@ func (b UncleBlock) SerializeToCore(writer io.Writer) error {
 	}
 	return serializeTable([]CoreSerializer{
 		b.Header,
-		Bytes(shortIdBuffer.Bytes()),
+		Raw(shortIdBuffer.Bytes()),
 	}, writer)
 }
 
@@ -349,7 +349,7 @@ func (b Block) SerializeToCore(writer io.Writer) error {
 	}
 	items := make([]CoreSerializer, len(buffers))
 	for i, b := range buffers {
-		items[i] = Bytes(b.Bytes())
+		items[i] = Raw(b.Bytes())
 	}
 	return serializeTable(items, writer)
 }
@@ -366,17 +366,17 @@ func (c WitnessArgs) SerializeToCore(writer io.Writer) error {
 	if c.Lock != nil {
 		items[0] = c.Lock
 	} else {
-		items[0] = Bytes([]byte{})
+		items[0] = Raw([]byte{})
 	}
 	if c.InputType != nil {
 		items[1] = c.InputType
 	} else {
-		items[1] = Bytes([]byte{})
+		items[1] = Raw([]byte{})
 	}
 	if c.OutputType != nil {
 		items[2] = c.OutputType
 	} else {
-		items[2] = Bytes([]byte{})
+		items[2] = Raw([]byte{})
 	}
 	return serializeTable(items, writer)
 }

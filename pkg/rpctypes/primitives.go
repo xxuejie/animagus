@@ -9,44 +9,44 @@ import (
 	"strings"
 )
 
-type Bytes []byte
+type Raw []byte
 
-func (data *Bytes) UnmarshalJSON(b []byte) error {
+func (data *Raw) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
 	if !strings.HasPrefix(s, "0x") {
-		return fmt.Errorf("Bytes should be a hex string started with 0x!")
+		return fmt.Errorf("Raw should be a hex string started with 0x!")
 	}
 	b, err := hex.DecodeString(s[2:])
 	if err != nil {
 		return err
 	}
-	*data = Bytes(b)
+	*data = Raw(b)
 	return nil
 }
 
-func (data Bytes) MarshalJSON() ([]byte, error) {
+func (data Raw) MarshalJSON() ([]byte, error) {
 	result := make([]byte, hex.EncodedLen(len(data))+2)
 	copy(result[0:2], []byte("0x"))
 	hex.Encode(result[2:], data)
 	return json.Marshal(string(result))
 }
 
-type VarBytes []byte
+type Bytes []byte
 
-func (data *VarBytes) UnmarshalJSON(b []byte) error {
-	var d Bytes
+func (data *Bytes) UnmarshalJSON(b []byte) error {
+	var d Raw
 	if err := json.Unmarshal(b, &d); err != nil {
 		return err
 	}
-	*data = VarBytes(d)
+	*data = Bytes(d)
 	return nil
 }
 
-func (data VarBytes) MarshalJSON() ([]byte, error) {
-	return json.Marshal(Bytes(data))
+func (data Bytes) MarshalJSON() ([]byte, error) {
+	return json.Marshal(Raw(data))
 }
 
 type Uint128 struct {
@@ -112,7 +112,7 @@ func (u Uint32) MarshalJSON() ([]byte, error) {
 type Hash [32]byte
 
 func (h *Hash) UnmarshalJSON(b []byte) error {
-	var data Bytes
+	var data Raw
 	err := data.UnmarshalJSON(b)
 	if err != nil {
 		return err
@@ -125,13 +125,13 @@ func (h *Hash) UnmarshalJSON(b []byte) error {
 }
 
 func (h Hash) MarshalJSON() ([]byte, error) {
-	return Bytes(h[:]).MarshalJSON()
+	return Raw(h[:]).MarshalJSON()
 }
 
 type ProposalShortId [10]byte
 
 func (h *ProposalShortId) UnmarshalJSON(b []byte) error {
-	var data Bytes
+	var data Raw
 	err := data.UnmarshalJSON(b)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func (h *ProposalShortId) UnmarshalJSON(b []byte) error {
 }
 
 func (h ProposalShortId) MarshalJSON() ([]byte, error) {
-	return Bytes(h[:]).MarshalJSON()
+	return Raw(h[:]).MarshalJSON()
 }
 
 type ScriptHashType byte
