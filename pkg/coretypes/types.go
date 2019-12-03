@@ -106,7 +106,7 @@ func (c CellInput) PreviousOutput() OutPoint {
 	return OutPoint(c[8:44])
 }
 
-func extractOffsets(b []byte) ([]int, bool) {
+func verifyAndExtractOffsets(b []byte, expected_field_count int, compatible bool) ([]int, bool) {
 	if (len(b)) < 4 {
 		return nil, false
 	}
@@ -125,6 +125,11 @@ func extractOffsets(b []byte) ([]int, bool) {
 		return nil, false
 	}
 	field_count := first_offset/4 - 1
+	if field_count < expected_field_count {
+		return nil, false
+	} else if (!compatible) && field_count > expected_field_count {
+		return nil, false
+	}
 	if slice_len < first_offset {
 		return nil, false
 	}
@@ -134,19 +139,10 @@ func extractOffsets(b []byte) ([]int, bool) {
 		offsets[i] = int(binary.LittleEndian.Uint32(b[start : start+4]))
 	}
 	offsets[field_count] = slice_len
-	return offsets, true
-}
-
-func verifyAndExtractOffsets(b []byte, expected_field_count int, compatible bool) ([]int, bool) {
-	offsets, success := extractOffsets(b)
-	if !success {
-		return nil, false
-	}
-	field_count := len(offsets) - 1
-	if field_count < expected_field_count {
-		return nil, false
-	} else if (!compatible) && field_count > expected_field_count {
-		return nil, false
+	for i := 0; i < len(offsets)-1; i++ {
+		if offsets[i] > offsets[i+1] {
+			return nil, false
+		}
 	}
 	return offsets, true
 }
@@ -347,7 +343,7 @@ func (c CellInputFixVec) Get(index int) CellInput {
 type CellOutputDynVec []byte
 
 func (c CellOutputDynVec) Verify(compatible bool) bool {
-	offsets, success := extractOffsets(c)
+	offsets, success := verifyAndExtractOffsets(c, 0, true)
 	if !success {
 		return false
 	}
@@ -374,7 +370,7 @@ func (c CellOutputDynVec) Get(i int) CellOutput {
 type BytesDynVec []byte
 
 func (b BytesDynVec) Verify(compatible bool) bool {
-	offsets, success := extractOffsets(b)
+	offsets, success := verifyAndExtractOffsets(b, 0, true)
 	if !success {
 		return false
 	}
@@ -604,7 +600,7 @@ func (b UncleBlock) Proposals() ProposalShortIdFixVec {
 type UncleBlockDynVec []byte
 
 func (b UncleBlockDynVec) Verify(compatible bool) bool {
-	offsets, success := extractOffsets(b)
+	offsets, success := verifyAndExtractOffsets(b, 0, true)
 	if !success {
 		return false
 	}
@@ -631,7 +627,7 @@ func (b UncleBlockDynVec) Get(i int) UncleBlock {
 type TransactionDynVec []byte
 
 func (t TransactionDynVec) Verify(compatible bool) bool {
-	offsets, success := extractOffsets(t)
+	offsets, success := verifyAndExtractOffsets(t, 0, true)
 	if !success {
 		return false
 	}
