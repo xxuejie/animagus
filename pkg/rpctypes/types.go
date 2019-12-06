@@ -3,6 +3,9 @@ package rpctypes
 type OutPoint struct {
 	TxHash Hash   `json:"tx_hash"`
 	Index  Uint32 `json:"index"`
+
+	GraphqlCell     *CellOutput   `json:"cell,omitempty"`
+	GraphqlCellData *GraphqlBytes `json:"cell_data,omitempty"`
 }
 
 type CellInput struct {
@@ -25,6 +28,8 @@ type CellOutput struct {
 type CellDep struct {
 	OutPoint OutPoint `json:"out_point"`
 	DepType  DepType  `json:"dep_type"`
+
+	GraphqlResolvedOutPoints []OutPoint `json:"resolved_out_points,omitempty"`
 }
 
 type RawTransaction struct {
@@ -34,6 +39,8 @@ type RawTransaction struct {
 	Inputs      []CellInput  `json:"inputs"`
 	Outputs     []CellOutput `json:"outputs"`
 	OutputsData []Bytes      `json:"outputs_data"`
+
+	GraphqlResolvedHeaderDeps []GraphqlHeaderDep `json:"resolved_header_deps,omitempty"`
 }
 
 type Transaction struct {
