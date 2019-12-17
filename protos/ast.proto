@@ -93,3 +93,12 @@ message List {
   repeated Value values = 2;
   repeated List children = 3;
 }
+
+message Call {
+  string name = 1;
+  repeated Value params = 2;
+}
+
+message Root {
+  repeated Call calls = 1;
+}
