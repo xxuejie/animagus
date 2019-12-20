@@ -2,17 +2,17 @@ syntax = "proto3";
 
 package ast;
 
-enum CellField {
+option go_package = "github.com/xxuejie/animagus/pkg/ast";
+
+enum Field {
   CAPACITY = 0;
   DATA = 1;
   LOCK = 2;
   TYPE = 3;
-}
 
-enum ScriptField {
-  CODE_HASH = 0;
-  HASH_TYPE = 1;
-  ARGS = 2;
+  CODE_HASH = 4;
+  HASH_TYPE = 5;
+  ARGS = 6;
 }
 
 enum Op {
@@ -34,15 +34,16 @@ enum Op {
   INDEX = 12;
 }
 
-message Primitive {
+message Value {
   enum Type {
+    // Primitive fields
     UINT64 = 0;
     BOOL = 1;
     BYTES = 2;
     LIVE_CELL = 3;
-    CELL_FIELD = 4;
-    SCRIPT_FIELD = 5;
-    OP = 6;
+    FIELD = 4;
+    OP = 5;
+    NIL = 6;
 
     // In animagus, we distinguish args and params in the following way:
     // * If a Value struct contains an arg, it will be interpretted as a
@@ -53,29 +54,22 @@ message Primitive {
     // to transfer to, those will be represented via parameters
     ARG = 7;
     PARAM = 8;
+
+    // Compound fields
+    LIST = 33;
+    APPLY = 34;
+    REDUCE = 35;
   }
   Type t = 1;
-  oneof fields {
+  oneof primitive {
     bool b = 2;
     uint64 u = 3;
     bytes raw = 4;
-    CellField cell_field = 5;
-    ScriptField script_field = 6;
-    Op op = 7;
+    Field field = 5;
+    Op op = 6;
   }
-}
-
-message Value {
-  enum Type {
-    PRIMITIVE = 0;
-    LIST = 1;
-    APPLY = 2;
-    REDUCE = 3;
-  }
-  Type t = 1;
-  Primitive p = 2;
-  List l = 3;
-  repeated Value children = 4;
+  List l = 7;
+  repeated Value children = 8;
 }
 
 message List {
@@ -96,7 +90,7 @@ message List {
 
 message Call {
   string name = 1;
-  repeated Value params = 2;
+  Value result = 3;
 }
 
 message Root {

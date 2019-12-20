@@ -90,6 +90,10 @@ func (u Uint64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fmt.Sprintf("0x%x", u))
 }
 
+func (u Uint64) EncodeToString() string {
+	return fmt.Sprintf("0x%x", u)
+}
+
 type Uint32 uint32
 
 func (u *Uint32) UnmarshalJSON(b []byte) error {

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package generic;
+
+option go_package = "github.com/xxuejie/animagus/pkg/generic";
+
+import "ast.proto";
+
+message GenericParams {
+  string name = 1;
+  repeated ast.Value params = 2;
+}
+
+service GenericService {
+  rpc Call(GenericParams) returns (ast.Value) {}
+}

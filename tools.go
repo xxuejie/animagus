@@ -6,4 +6,5 @@ package main
 
 import (
 	_ "github.com/awalterschulze/goderive"
+	_ "github.com/golang/protobuf/protoc-gen-go"
 )

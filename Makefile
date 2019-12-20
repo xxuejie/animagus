@@ -1,11 +1,12 @@
 test:
-	go test ./pkg/...
+	go test ./...
 
 fmt:
 	gofmt -w .
 
 proto:
-	protoc -I protos protos/ast.proto --go_out=plugins=grpc:pkg/ast
+	protoc -I protos protos/ast.proto --go_out=plugins=grpc,paths=source_relative:./pkg/ast
+	protoc -I protos protos/generic.proto --go_out=plugins=grpc,paths=source_relative:./pkg/generic
 
 download:
 	@echo Download go.mod dependencies
