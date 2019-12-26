@@ -73,7 +73,7 @@ query {
 }
 
 type getBlockResponse struct {
-	GetBlock *rpctypes.Block
+	GetBlock *rpctypes.BlockView
 }
 
 func (i *Indexer) Run() error {
@@ -202,7 +202,7 @@ query($blockNumber: String) {
 								return err
 							}
 							commands.insert(key, rpctypes.OutPoint{
-								TxHash: *tx.RawTransaction.GraphqlHash,
+								TxHash: tx.Hash,
 								Index:  rpctypes.Uint32(outputIndex),
 							})
 						}
@@ -210,16 +210,16 @@ query($blockNumber: String) {
 				}
 			}
 		}
-		commands.do("SET", fmt.Sprintf("BLOCK:%d:HASH", blockToFetch), block.Header.GraphqlHash[:])
+		commands.do("SET", fmt.Sprintf("BLOCK:%d:HASH", blockToFetch), block.Header.Hash[:])
 		lastBlock = make([]byte, 40)
 		binary.LittleEndian.PutUint64(lastBlock, blockToFetch)
-		copy(lastBlock[8:], block.Header.GraphqlHash[:])
+		copy(lastBlock[8:], block.Header.Hash[:])
 		commands.do("SET", "LAST_BLOCK", lastBlock)
 		err = commands.execute(redisConn)
 		if err != nil {
 			return err
 		}
-		log.Printf("Indexed block %x, block number %d", *block.Header.GraphqlHash, blockToFetch)
+		log.Printf("Indexed block %x, block number %d", block.Header.Hash, blockToFetch)
 	}
 }
 

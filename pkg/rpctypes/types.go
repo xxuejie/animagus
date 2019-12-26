@@ -40,7 +40,6 @@ type RawTransaction struct {
 	Outputs     []CellOutput `json:"outputs"`
 	OutputsData []Bytes      `json:"outputs_data"`
 
-	GraphqlHash               *Hash              `json:"hash"`
 	GraphqlResolvedHeaderDeps []GraphqlHeaderDep `json:"resolved_header_deps,omitempty"`
 	GraphqlCellsData          []GraphqlBytes     `json:"cells_data,omitempty"`
 }
@@ -61,8 +60,6 @@ type RawHeader struct {
 	ProposalsHash    Hash   `json:"proposals_hash"`
 	UnclesHash       Hash   `json:"uncles_hash"`
 	Dao              Raw    `json:"dao"`
-
-	GraphqlHash *Hash `json:"hash"`
 }
 
 type Header struct {
