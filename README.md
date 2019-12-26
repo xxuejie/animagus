@@ -17,6 +17,8 @@ The name animagus comes from [Harry Potter series](https://harrypotter.fandom.co
 
 Note this project is still in fast development phase, the AST used is not yet in a stable state. We might modify it to add more capabilities.
 
+We will continue to add docs here explaining how this project works once the AST is in a relatively more stable state, but if you want to get a taste right now, here's the [slide](https://github.com/xxuejie/animagus/blob/master/docs/A%20new%20dapp%20framework.pdf) for an introductory talk on animagus.
+
 # How to Run
 
 We've packed a small [example](https://github.com/xxuejie/animagus/tree/master/examples/balance) that can aggregate balances of different accounts in CKB. This can help overcome some of the challenges brought by CKB's unique flexibility.
