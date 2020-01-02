@@ -127,7 +127,7 @@ func (i *Indexer) Run() error {
 			if err != nil {
 				return err
 			}
-			log.Printf("Reverted block number %d", blockToFetch - 1)
+			log.Printf("Reverted block number %d", blockToFetch-1)
 			continue
 		}
 
@@ -169,6 +169,8 @@ query($blockNumber: String) {
           cell_data {
             content
           }
+          tx_hash
+          index
         }
       }
       outputs {
@@ -204,7 +206,7 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 				err = i.processCell(input.PreviousOutput.GraphqlCell,
 					input.PreviousOutput.GraphqlCellData.Content,
 					input.PreviousOutput,
-					true,
+					false,
 					commands)
 				if err != nil {
 					return err
@@ -219,7 +221,7 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 					TxHash: tx.Hash,
 					Index:  rpctypes.Uint32(outputIndex),
 				},
-				false,
+				true,
 				commands)
 			if err != nil {
 				return err
