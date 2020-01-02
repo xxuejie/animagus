@@ -127,6 +127,7 @@ func (i *Indexer) Run() error {
 			if err != nil {
 				return err
 			}
+			log.Printf("Reverted block number %d", blockToFetch - 1)
 			continue
 		}
 
