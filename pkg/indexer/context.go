@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 
-	internal_ast "github.com/xxuejie/animagus/internal/ast"
 	"github.com/xxuejie/animagus/pkg/ast"
 )
 
@@ -35,23 +34,13 @@ func (c ValueContext) QueryIndex(query *ast.List) int {
 	return -1
 }
 
-func (c ValueContext) IndexKey(queryIndex int, params []*internal_ast.Value) (string, error) {
+func (c ValueContext) IndexKey(queryIndex int, params []*ast.Value) (string, error) {
 	var buffer bytes.Buffer
 	_, err := buffer.WriteString(fmt.Sprintf("%d", len(params)))
 	if err != nil {
 		return "", err
 	}
-	for i, param := range params {
-		value := param.Value
-		if value == nil && param.Indexing {
-			if param.IndexingValue == nil {
-				return "", fmt.Errorf("Param %d is not filled!", i)
-			}
-			value = param.IndexingValue.Value
-			if value == nil {
-				return "", fmt.Errorf("Param can only be primitive AST values!")
-			}
-		}
+	for _, value := range params {
 		switch value.GetT() {
 		case ast.Value_UINT64:
 			_, err = buffer.WriteString(fmt.Sprintf("n%d", value.GetU()))

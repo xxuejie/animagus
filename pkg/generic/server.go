@@ -8,7 +8,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
 	"github.com/machinebox/graphql"
-	internal_ast "github.com/xxuejie/animagus/internal/ast"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/coretypes"
 	"github.com/xxuejie/animagus/pkg/executor"
@@ -58,35 +57,31 @@ type executeEnvironment struct {
 	s            *Server
 }
 
-func (e executeEnvironment) Arg(i int) *internal_ast.Value {
+func (e executeEnvironment) Arg(i int) *ast.Value {
 	return nil
 }
 
-func (e executeEnvironment) Param(i int) *internal_ast.Value {
+func (e executeEnvironment) Param(i int) *ast.Value {
 	if i < 0 || i >= len(e.params.GetParams()) {
 		return nil
 	}
-	return &internal_ast.Value{
-		Value: e.params.GetParams()[i],
-	}
+	return e.params.GetParams()[i]
+}
+
+func (e executeEnvironment) IndexParam(i int, value *ast.Value) error {
+	return fmt.Errorf("Indexing param is not allowed when executing!")
 }
 
 type getCellsResponse struct {
 	GetCells []*rpctypes.OutPoint
 }
 
-func (e executeEnvironment) QueryCell(query *ast.List) ([]*internal_ast.Value, error) {
+func (e executeEnvironment) QueryCell(query *ast.List) ([]*ast.Value, error) {
 	queryIndex := e.valueContext.QueryIndex(query)
 	if queryIndex == -1 {
 		return nil, fmt.Errorf("Invalid query cell argument!")
 	}
-	params := make([]*internal_ast.Value, len(e.params.GetParams()))
-	for i, param := range e.params.GetParams() {
-		params[i] = &internal_ast.Value{
-			Value: param,
-		}
-	}
-	indexKey, err := e.valueContext.IndexKey(queryIndex, params)
+	indexKey, err := e.valueContext.IndexKey(queryIndex, e.params.GetParams())
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +92,7 @@ func (e executeEnvironment) QueryCell(query *ast.List) ([]*internal_ast.Value, e
 		return nil, err
 	}
 	if len(slices) == 0 {
-		return []*internal_ast.Value{}, nil
+		return []*ast.Value{}, nil
 	}
 	outPoints := make([]coretypes.OutPoint, len(slices))
 	for i, slice := range slices {
@@ -128,12 +123,9 @@ query {
 	if err != nil {
 		return nil, err
 	}
-	results := make([]*internal_ast.Value, len(response.GetCells))
+	results := make([]*ast.Value, len(response.GetCells))
 	for i, cell := range response.GetCells {
-		results[i] = &internal_ast.Value{
-			Cell:     cell.GraphqlCell,
-			CellData: cell.GraphqlCellData.Content,
-		}
+		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content)
 	}
 	return results, nil
 }

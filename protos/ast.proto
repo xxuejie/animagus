@@ -59,6 +59,10 @@ message Value {
     LIST = 33;
     APPLY = 34;
     REDUCE = 35;
+
+    // Blockchain data structures
+    SCRIPT = 65;
+    CELL = 66;
   }
   Type t = 1;
   oneof primitive {

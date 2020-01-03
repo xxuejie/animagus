@@ -14,7 +14,6 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"github.com/machinebox/graphql"
 	blake2b "github.com/minio/blake2b-simd"
-	internal_ast "github.com/xxuejie/animagus/internal/ast"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
@@ -203,8 +202,8 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 		for _, input := range tx.RawTransaction.Inputs {
 			if input.PreviousOutput.GraphqlCell != nil &&
 				input.PreviousOutput.GraphqlCellData != nil {
-				err = i.processCell(input.PreviousOutput.GraphqlCell,
-					input.PreviousOutput.GraphqlCellData.Content,
+				err = i.processCell(*input.PreviousOutput.GraphqlCell,
+					*input.PreviousOutput.GraphqlCellData.Content,
 					input.PreviousOutput,
 					false,
 					commands)
@@ -215,8 +214,8 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 		}
 
 		for outputIndex, output := range tx.RawTransaction.Outputs {
-			err = i.processCell(&output,
-				tx.RawTransaction.GraphqlCellsData[outputIndex].Content,
+			err = i.processCell(output,
+				*tx.RawTransaction.GraphqlCellsData[outputIndex].Content,
 				rpctypes.OutPoint{
 					TxHash: tx.Hash,
 					Index:  rpctypes.Uint32(outputIndex),
@@ -281,10 +280,9 @@ func (i *Indexer) revertBlock(blockNumber uint64) error {
 	return err
 }
 
-func (i *Indexer) processCell(cell *rpctypes.CellOutput, cellData *rpctypes.Raw, outPoint rpctypes.OutPoint, insert bool, commands *commandBuffer) error {
+func (i *Indexer) processCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint, insert bool, commands *commandBuffer) error {
 	for _, valueContext := range i.values {
 		for queryIndex, query := range valueContext.Queries {
-			// TODO: cell data support
 			params, err := executeIndexingQuery(query, cell, cellData)
 			if err != nil {
 				return err
@@ -394,11 +392,11 @@ func (c *commandBuffer) execute(conn redis.Conn) error {
 }
 
 type indexingEnvironment struct {
-	cell   *internal_ast.Value
-	params map[int]*internal_ast.Value
+	cell          *ast.Value
+	indexedValues map[int]*ast.Value
 }
 
-func (e *indexingEnvironment) Arg(i int) *internal_ast.Value {
+func (e *indexingEnvironment) Arg(i int) *ast.Value {
 	if i == 0 {
 		return e.cell
 	} else {
@@ -406,34 +404,35 @@ func (e *indexingEnvironment) Arg(i int) *internal_ast.Value {
 	}
 }
 
-func (e *indexingEnvironment) Param(i int) *internal_ast.Value {
-	param, found := e.params[i]
-	// TODO: for better security we can visit the AST first, gather the number
-	// of params required, then come back here and allocate all params at first.
-	// That will work around problems where you have shortcuts in the AST.
-	if !found {
-		param = &internal_ast.Value{
-			Indexing: true,
-		}
-		e.params[i] = param
+func (e *indexingEnvironment) Param(i int) *ast.Value {
+	return &ast.Value{
+		T: ast.Value_PARAM,
+		Primitive: &ast.Value_U{
+			U: uint64(i),
+		},
 	}
-	return param
 }
 
-func (e *indexingEnvironment) QueryCell(query *ast.List) ([]*internal_ast.Value, error) {
+func (e *indexingEnvironment) IndexParam(i int, value *ast.Value) error {
+	_, found := e.indexedValues[i]
+	if found {
+		return fmt.Errorf("Param %d is already indexed!", i)
+	}
+	e.indexedValues[i] = value
+	return nil
+}
+
+func (e *indexingEnvironment) QueryCell(query *ast.List) ([]*ast.Value, error) {
 	return nil, fmt.Errorf("QueryCell is not allowed in indexer!")
 }
 
-func executeIndexingQuery(query *ast.List, cell *rpctypes.CellOutput, cellData *rpctypes.Raw) ([]*internal_ast.Value, error) {
+func executeIndexingQuery(query *ast.List, cell rpctypes.CellOutput, cellData rpctypes.Raw) ([]*ast.Value, error) {
 	if len(query.GetValues()) != 1 {
 		return nil, fmt.Errorf("Invalid number of values to query cell: %d", len(query.GetValues()))
 	}
 	environment := &indexingEnvironment{
-		cell: &internal_ast.Value{
-			Cell:     cell,
-			CellData: cellData,
-		},
-		params: make(map[int]*internal_ast.Value),
+		cell:          ast.ConvertCell(cell, cellData),
+		indexedValues: make(map[int]*ast.Value),
 	}
 	value, err := executor.Execute(query.GetValues()[0], environment)
 	if err != nil {
@@ -445,12 +444,12 @@ func executeIndexingQuery(query *ast.List, cell *rpctypes.CellOutput, cellData *
 	if !value.GetB() {
 		return nil, nil
 	}
-	sortedParams := make([]*internal_ast.Value, len(environment.params))
-	for i, param := range environment.params {
-		if i >= len(sortedParams) {
-			return nil, fmt.Errorf("Params are not all used!")
+	sortedValues := make([]*ast.Value, len(environment.indexedValues))
+	for i, value := range environment.indexedValues {
+		if i >= len(sortedValues) {
+			return nil, fmt.Errorf("Values are not all used!")
 		}
-		sortedParams[i] = param
+		sortedValues[i] = value
 	}
-	return sortedParams, nil
+	return sortedValues, nil
 }
