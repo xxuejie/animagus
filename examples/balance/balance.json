@@ -1,0 +1,102 @@
+{
+  "type": "reduce",
+  "list": {
+    "type": "map",
+    "func": {
+      "type": "get",
+      "field": "capacity",
+      "value": {
+        "type": "arg",
+        "u": 0
+      }
+    },
+    "list": {
+      "type": "query_cells",
+      "query": {
+        "type": "and",
+        "args": [
+          {
+            "type": "equal",
+            "args": [
+              {
+                "type": "get",
+                "field": "code_hash",
+                "value": {
+                  "type": "get",
+                  "field": "lock",
+                  "value": {
+                    "type": "arg",
+                    "u": 0
+                  }
+                }
+              },
+              {
+                "type": "bytes",
+                "raw": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+              }
+            ]
+          },
+          {
+            "type": "equal",
+            "args": [
+              {
+                "type": "get",
+                "field": "hash_type",
+                "value": {
+                  "type": "get",
+                  "field": "lock",
+                  "value": {
+                    "type": "arg",
+                    "u": 0
+                  }
+                }
+              },
+              {
+                "type": "uint64",
+                "u": 1
+              }
+            ]
+          },
+          {
+            "type": "equal",
+            "args": [
+              {
+                "type": "get",
+                "field": "args",
+                "value": {
+                  "type": "get",
+                  "field": "lock",
+                  "value": {
+                    "type": "arg",
+                    "u": 0
+                  }
+                }
+              },
+              {
+                "type": "param",
+                "u": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "func": {
+    "type": "plus",
+    "args": [
+      {
+        "type": "arg",
+        "u": 0
+      },
+      {
+        "type": "arg",
+        "u": 1
+      }
+    ]
+  },
+  "initial_value": {
+    "type": "uint64",
+    "u": 0
+  }
+}

@@ -1,4 +1,7 @@
-animagus
+/animagus
+/json_ast
 examples/balance/balance.bin
 examples/balance/balance.txt
 examples/balance/*_pb.rb
+
+utils/json_ast/*_pb.rb
