@@ -16,4 +16,7 @@ install-tools: download
 	@echo Installing tools from tools.go
 	cat tools.go | grep _ | awk -F'"' '{print $$2}' | xargs -tI % go install %
 
-.PHONY: fmt proto test download install-tools
+ci-fmt: fmt
+	git diff --exit-code
+
+.PHONY: fmt proto test download install-tools ci-fmt
