@@ -110,12 +110,12 @@ func evaluateOp(op ast.Op, operands []*ast.Value, e Environment) (*ast.Value, er
 			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
 		}
 		var result bool
-		if operands[0].GetT() == ast.Value_PARAM {
+		if operands[0].GetT() == ast.Value_PARAM && operands[1].GetT() != ast.Value_NIL {
 			if err := e.IndexParam(int(operands[0].GetU()), operands[1]); err != nil {
 				return nil, err
 			}
 			result = true
-		} else if operands[1].GetT() == ast.Value_PARAM {
+		} else if operands[1].GetT() == ast.Value_PARAM && operands[0].GetT() != ast.Value_NIL {
 			if err := e.IndexParam(int(operands[1].GetU()), operands[0]); err != nil {
 				return nil, err
 			}

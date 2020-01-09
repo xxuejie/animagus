@@ -52,8 +52,8 @@ message Value {
     // * Params, on the other hand, denotes user input when calling RPCs,
     // for example, a user might provide an amount to transfer, or an address
     // to transfer to, those will be represented via parameters
-    ARG = 7;
-    PARAM = 8;
+    ARG = 17;
+    PARAM = 18;
 
     // Compound fields
     LIST = 33;
