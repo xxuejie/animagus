@@ -89,20 +89,18 @@ func main() {
 
 	test := and(code_hash_test, hash_type_test, args_test)
 
-	cells := &ast.List{
-		T:      ast.List_QUERY_CELLS,
-		Values: []*ast.Value{test},
+	cells := &ast.Value{
+		T:        ast.Value_QUERY_CELLS,
+		Children: []*ast.Value{test},
 	}
 
-	capacities := &ast.List{
-		T:        ast.List_MAP,
-		Values:   []*ast.Value{fetch_field(ast.Value_GET_CAPACITY, arg(0))},
-		Children: []*ast.List{cells},
+	capacities := &ast.Value{
+		T:        ast.Value_MAP,
+		Children: []*ast.Value{fetch_field(ast.Value_GET_CAPACITY, arg(0)), cells},
 	}
 
 	balance := &ast.Value{
 		T: ast.Value_REDUCE,
-		L: capacities,
 		Children: []*ast.Value{
 			&ast.Value{
 				T: ast.Value_PLUS,
@@ -112,6 +110,7 @@ func main() {
 				},
 			},
 			uint_value(0),
+			capacities,
 		},
 	}
 

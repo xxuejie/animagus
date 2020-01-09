@@ -11,7 +11,7 @@ type Environment interface {
 	Arg(i int) *ast.Value
 	Param(i int) *ast.Value
 	IndexParam(i int, value *ast.Value) error
-	QueryCell(query *ast.List) ([]*ast.Value, error)
+	QueryCell(query *ast.Value) ([]*ast.Value, error)
 }
 
 func Execute(expr *ast.Value, e Environment) (*ast.Value, error) {
@@ -80,18 +80,15 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			args: args,
 		})
 	case ast.Value_REDUCE:
-		if len(expr.GetChildren()) != 2 {
+		if len(expr.GetChildren()) != 3 {
 			return nil, fmt.Errorf("Invalid number of arguments for reduce!")
-		}
-		if expr.GetL() == nil {
-			return nil, fmt.Errorf("List must be provided for reduce!")
 		}
 		f := expr.GetChildren()[0]
 		currentValue, err := evaluateValue(expr.GetChildren()[1], e)
 		if err != nil {
 			return nil, err
 		}
-		list, err := evaluateList(expr.GetL(), e)
+		list, err := evaluateList(expr.GetChildren()[2], e)
 		if err != nil {
 			return nil, err
 		}
@@ -254,17 +251,14 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 	return nil, fmt.Errorf("Invalid get field: %s", field.String())
 }
 
-func evaluateList(list *ast.List, e Environment) ([]*ast.Value, error) {
+func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 	switch list.GetT() {
-	case ast.List_MAP:
-		if len(list.GetChildren()) != 1 {
+	case ast.Value_MAP:
+		if len(list.GetChildren()) != 2 {
 			return nil, fmt.Errorf("Invalid number of lists for map!")
 		}
-		if len(list.GetValues()) != 1 {
-			return nil, fmt.Errorf("Invalid number of values for map!")
-		}
-		f := list.GetValues()[0]
-		list, err := evaluateList(list.GetChildren()[0], e)
+		f := list.GetChildren()[0]
+		list, err := evaluateList(list.GetChildren()[1], e)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +273,7 @@ func evaluateList(list *ast.List, e Environment) ([]*ast.Value, error) {
 			}
 		}
 		return results, nil
-	case ast.List_QUERY_CELLS:
+	case ast.Value_QUERY_CELLS:
 		return e.QueryCell(list)
 	}
 	return nil, fmt.Errorf("Invalid list type: %s", list.GetT().String())

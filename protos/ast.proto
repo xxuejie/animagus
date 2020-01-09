@@ -28,9 +28,14 @@ message Value {
     // TODO: header & transaction data structures
 
     // Compound fields
-    LIST = 22;
-    APPLY = 23;
+    APPLY = 22;
     REDUCE = 24;
+
+    // List fields
+    LIST = 25;
+    MAP = 26;
+    FILTER = 27;
+    QUERY_CELLS = 28;
 
     // Cell get operations
     GET_CAPACITY = 48;
@@ -69,24 +74,7 @@ message Value {
     uint64 u = 3;
     bytes raw = 4;
   }
-  List l = 7;
   repeated Value children = 8;
-}
-
-message List {
-  enum Type {
-    EMPTY = 0;
-    CONS = 1;
-    QUERY_CELLS = 2;
-    MAP = 3;
-    FILTER = 4;
-    SLICE = 5;
-    CONCAT = 6;
-    // TODO: ZIP
-  }
-  Type t = 1;
-  repeated Value values = 2;
-  repeated List children = 3;
 }
 
 message Call {

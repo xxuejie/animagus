@@ -76,7 +76,7 @@ type getCellsResponse struct {
 	GetCells []*rpctypes.OutPoint
 }
 
-func (e executeEnvironment) QueryCell(query *ast.List) ([]*ast.Value, error) {
+func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	queryIndex := e.valueContext.QueryIndex(query)
 	if queryIndex == -1 {
 		return nil, fmt.Errorf("Invalid query cell argument!")

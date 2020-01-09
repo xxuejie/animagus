@@ -24,6 +24,6 @@ func (e *prependEnvironment) IndexParam(i int, value *ast.Value) error {
 	return e.e.IndexParam(i, value)
 }
 
-func (e *prependEnvironment) QueryCell(query *ast.List) ([]*ast.Value, error) {
+func (e *prependEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	return e.e.QueryCell(query)
 }

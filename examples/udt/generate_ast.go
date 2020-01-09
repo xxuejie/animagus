@@ -70,12 +70,11 @@ func param(i uint64) *ast.Value {
 	}
 }
 
-func map_funcs(list *ast.List, funcs ...*ast.Value) *ast.List {
+func map_funcs(list *ast.Value, funcs ...*ast.Value) *ast.Value {
 	for _, f := range funcs {
-		list = &ast.List{
-			T:        ast.List_MAP,
-			Values:   []*ast.Value{f},
-			Children: []*ast.List{list},
+		list = &ast.Value{
+			T:        ast.Value_MAP,
+			Children: []*ast.Value{f, list},
 		}
 	}
 	return list
@@ -120,9 +119,9 @@ func isSimpleUdtCell(argIndex uint64) *ast.Value {
 }
 
 func main() {
-	cells := &ast.List{
-		T: ast.List_QUERY_CELLS,
-		Values: []*ast.Value{
+	cells := &ast.Value{
+		T: ast.Value_QUERY_CELLS,
+		Children: []*ast.Value{
 			and(isDefaultSecpCell(0), isSimpleUdtCell(0)),
 		},
 	}
@@ -146,7 +145,6 @@ func main() {
 
 	balance := &ast.Value{
 		T: ast.Value_REDUCE,
-		L: tokens,
 		Children: []*ast.Value{
 			&ast.Value{
 				T: ast.Value_PLUS,
@@ -156,6 +154,7 @@ func main() {
 				},
 			},
 			bytes_value([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
+			tokens,
 		},
 	}
 

@@ -10,14 +10,14 @@ import (
 type ValueContext struct {
 	Name    string
 	Value   *ast.Value
-	Queries []*ast.List
+	Queries []*ast.Value
 }
 
 func NewValueContext(name string, value *ast.Value) (ValueContext, error) {
 	context := ValueContext{
 		Name:    name,
 		Value:   value,
-		Queries: make([]*ast.List, 0),
+		Queries: make([]*ast.Value, 0),
 	}
 	if err := visitValue(value, &context); err != nil {
 		return ValueContext{}, err
@@ -25,7 +25,7 @@ func NewValueContext(name string, value *ast.Value) (ValueContext, error) {
 	return context, nil
 }
 
-func (c ValueContext) QueryIndex(query *ast.List) int {
+func (c ValueContext) QueryIndex(query *ast.Value) int {
 	for i, q := range c.Queries {
 		if query == q {
 			return i
@@ -60,28 +60,12 @@ func (c ValueContext) IndexKey(queryIndex int, params []*ast.Value) (string, err
 }
 
 func visitValue(value *ast.Value, context *ValueContext) error {
-	for _, child := range value.GetChildren() {
-		err := visitValue(child, context)
-		if err != nil {
-			return err
-		}
-	}
-	return visitList(value.GetL(), context)
-}
-
-func visitList(list *ast.List, context *ValueContext) error {
-	if list.GetT() == ast.List_QUERY_CELLS {
-		context.Queries = append(context.Queries, list)
+	if value.GetT() == ast.Value_QUERY_CELLS {
+		context.Queries = append(context.Queries, value)
 		return nil
 	}
-	for _, child := range list.GetChildren() {
-		err := visitList(child, context)
-		if err != nil {
-			return err
-		}
-	}
-	for _, value := range list.GetValues() {
-		err := visitValue(value, context)
+	for _, child := range value.GetChildren() {
+		err := visitValue(child, context)
 		if err != nil {
 			return err
 		}

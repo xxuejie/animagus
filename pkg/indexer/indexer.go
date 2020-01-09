@@ -422,19 +422,19 @@ func (e *indexingEnvironment) IndexParam(i int, value *ast.Value) error {
 	return nil
 }
 
-func (e *indexingEnvironment) QueryCell(query *ast.List) ([]*ast.Value, error) {
+func (e *indexingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	return nil, fmt.Errorf("QueryCell is not allowed in indexer!")
 }
 
-func executeIndexingQuery(query *ast.List, cell rpctypes.CellOutput, cellData rpctypes.Raw) ([]*ast.Value, error) {
-	if len(query.GetValues()) != 1 {
-		return nil, fmt.Errorf("Invalid number of values to query cell: %d", len(query.GetValues()))
+func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData rpctypes.Raw) ([]*ast.Value, error) {
+	if len(query.GetChildren()) != 1 {
+		return nil, fmt.Errorf("Invalid number of values to query cell: %d", len(query.GetChildren()))
 	}
 	environment := &indexingEnvironment{
 		cell:          ast.ConvertCell(cell, cellData),
 		indexedValues: make(map[int]*ast.Value),
 	}
-	value, err := executor.Execute(query.GetValues()[0], environment)
+	value, err := executor.Execute(query.GetChildren()[0], environment)
 	if err != nil {
 		return nil, err
 	}
