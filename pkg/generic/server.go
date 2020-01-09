@@ -103,7 +103,7 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	}
 	req := graphql.NewRequest(fmt.Sprintf(`
 query {
-  getCells(outPoints: %s) {
+  getCells(outPoints: %s, skipMissing: true) {
     cell {
       capacity
       lock {
