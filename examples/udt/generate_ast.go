@@ -10,37 +10,17 @@ import (
 	"github.com/xxuejie/animagus/pkg/ast"
 )
 
-func fetch_field(field ast.Field, value *ast.Value) *ast.Value {
+func fetch_field(field ast.Value_Type, value *ast.Value) *ast.Value {
 	return &ast.Value{
-		T: ast.Value_APPLY,
-		Children: []*ast.Value{
-			&ast.Value{
-				T: ast.Value_OP,
-				Primitive: &ast.Value_Op{
-					Op: ast.Op_GET,
-				},
-			},
-			&ast.Value{
-				T: ast.Value_FIELD,
-				Primitive: &ast.Value_Field{
-					Field: field,
-				},
-			},
-			value,
-		},
+		T:        field,
+		Children: []*ast.Value{value},
 	}
 }
 
 func equal(a *ast.Value, b *ast.Value) *ast.Value {
 	return &ast.Value{
-		T: ast.Value_APPLY,
+		T: ast.Value_EQUAL,
 		Children: []*ast.Value{
-			&ast.Value{
-				T: ast.Value_OP,
-				Primitive: &ast.Value_Op{
-					Op: ast.Op_EQUAL,
-				},
-			},
 			a,
 			b,
 		},
@@ -66,18 +46,9 @@ func uint_value(u uint64) *ast.Value {
 }
 
 func and(values ...*ast.Value) *ast.Value {
-	children := []*ast.Value{
-		&ast.Value{
-			T: ast.Value_OP,
-			Primitive: &ast.Value_Op{
-				Op: ast.Op_AND,
-			},
-		},
-	}
-	children = append(children, values...)
 	return &ast.Value{
-		T:        ast.Value_APPLY,
-		Children: children,
+		T:        ast.Value_AND,
+		Children: values,
 	}
 }
 
@@ -111,21 +82,21 @@ func map_funcs(list *ast.List, funcs ...*ast.Value) *ast.List {
 }
 
 func isDefaultSecpCell(argIndex uint64) *ast.Value {
-	lock := fetch_field(ast.Field_LOCK, arg(argIndex))
+	lock := fetch_field(ast.Value_GET_LOCK, arg(argIndex))
 
 	expected_code_hash, err := hex.DecodeString("9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8")
 	if err != nil {
 		log.Fatal(err)
 	}
 	code_hash_test := equal(
-		fetch_field(ast.Field_CODE_HASH, lock),
+		fetch_field(ast.Value_GET_CODE_HASH, lock),
 		bytes_value(expected_code_hash))
 
 	hash_type_test := equal(
-		fetch_field(ast.Field_HASH_TYPE, lock),
+		fetch_field(ast.Value_GET_HASH_TYPE, lock),
 		uint_value(1))
 
-	args_test := equal(fetch_field(ast.Field_ARGS, lock), param(0))
+	args_test := equal(fetch_field(ast.Value_GET_ARGS, lock), param(0))
 
 	return and(code_hash_test, hash_type_test, args_test)
 }
@@ -136,17 +107,11 @@ func isSimpleUdtCell(argIndex uint64) *ast.Value {
 		log.Fatal(err)
 	}
 
-	t := fetch_field(ast.Field_TYPE, arg(argIndex))
+	t := fetch_field(ast.Value_GET_TYPE, arg(argIndex))
 	return equal(
 		&ast.Value{
-			T: ast.Value_APPLY,
+			T: ast.Value_HASH,
 			Children: []*ast.Value{
-				&ast.Value{
-					T: ast.Value_OP,
-					Primitive: &ast.Value_Op{
-						Op: ast.Op_HASH,
-					},
-				},
 				t,
 			},
 		},
@@ -164,16 +129,10 @@ func main() {
 
 	tokens := map_funcs(
 		cells,
-		fetch_field(ast.Field_DATA, arg(0)),
+		fetch_field(ast.Value_GET_DATA, arg(0)),
 		&ast.Value{
-			T: ast.Value_APPLY,
+			T: ast.Value_SLICE_BYTES,
 			Children: []*ast.Value{
-				&ast.Value{
-					T: ast.Value_OP,
-					Primitive: &ast.Value_Op{
-						Op: ast.Op_SLICE_BYTES,
-					},
-				},
 				arg(0),
 				&ast.Value{
 					T: ast.Value_UINT64,
@@ -190,14 +149,8 @@ func main() {
 		L: tokens,
 		Children: []*ast.Value{
 			&ast.Value{
-				T: ast.Value_APPLY,
+				T: ast.Value_PLUS,
 				Children: []*ast.Value{
-					&ast.Value{
-						T: ast.Value_OP,
-						Primitive: &ast.Value_Op{
-							Op: ast.Op_PLUS,
-						},
-					},
 					arg(0),
 					arg(1),
 				},

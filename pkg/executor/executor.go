@@ -18,10 +18,39 @@ func Execute(expr *ast.Value, e Environment) (*ast.Value, error) {
 	return evaluateValue(expr, e)
 }
 
+func isPrimitive(expr *ast.Value) bool {
+	return expr.GetT() < ast.Value_ARG
+}
+
+func isOp(expr *ast.Value) bool {
+	return expr.GetT() >= ast.Value_HASH
+}
+
+func isGetOp(expr *ast.Value) bool {
+	return expr.GetT() >= ast.Value_GET_CAPACITY && expr.GetT() < ast.Value_HASH
+}
+
 func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 	// Primitive value
-	if expr.GetT() < ast.Value_ARG {
+	if isPrimitive(expr) {
 		return expr, nil
+	}
+	if isOp(expr) {
+		children, err := evaluateAstValues(expr.GetChildren(), e)
+		if err != nil {
+			return nil, err
+		}
+		return evaluateOp(expr.GetT(), children, e)
+	}
+	if isGetOp(expr) {
+		if len(expr.GetChildren()) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to GET")
+		}
+		operand, err := evaluateValue(expr.GetChildren()[0], e)
+		if err != nil {
+			return nil, err
+		}
+		return evaluateOpGet(expr.GetT(), operand, e)
 	}
 	switch expr.GetT() {
 	case ast.Value_ARG:
@@ -39,17 +68,17 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		}
 		return param, nil
 	case ast.Value_APPLY:
-		children, err := evaluateAstValues(expr.GetChildren(), e)
+		if len(expr.GetChildren()) < 1 {
+			return nil, fmt.Errorf("Not enough arguments for apply!")
+		}
+		args, err := evaluateAstValues(expr.GetChildren()[1:], e)
 		if err != nil {
 			return nil, err
 		}
-		if len(children) < 1 {
-			return nil, fmt.Errorf("Not enough arguments for apply!")
-		}
-		if children[0].GetT() != ast.Value_OP {
-			return nil, fmt.Errorf("Invalid apply type: %s", children[0].GetT().String())
-		}
-		return evaluateOp(children[0].GetOp(), children[1:], e)
+		return evaluateValue(expr.GetChildren()[0], &prependEnvironment{
+			e:    e,
+			args: args,
+		})
 	case ast.Value_REDUCE:
 		if len(expr.GetChildren()) != 2 {
 			return nil, fmt.Errorf("Invalid number of arguments for reduce!")
@@ -95,17 +124,9 @@ func evaluateAstValues(values []*ast.Value, e Environment) ([]*ast.Value, error)
 	return evaluatedValues, nil
 }
 
-func evaluateOp(op ast.Op, operands []*ast.Value, e Environment) (*ast.Value, error) {
+func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.Value, error) {
 	switch op {
-	case ast.Op_GET:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to GET")
-		}
-		if operands[0].GetT() != ast.Value_FIELD {
-			return nil, fmt.Errorf("First operand to GET must be a field!")
-		}
-		return evaluateOpGet(operands[0].GetField(), operands[1], e)
-	case ast.Op_EQUAL:
+	case ast.Value_EQUAL:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
 		}
@@ -129,7 +150,7 @@ func evaluateOp(op ast.Op, operands []*ast.Value, e Environment) (*ast.Value, er
 				B: result,
 			},
 		}, nil
-	case ast.Op_PLUS:
+	case ast.Value_PLUS:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to PLUS")
 		}
@@ -143,7 +164,7 @@ func evaluateOp(op ast.Op, operands []*ast.Value, e Environment) (*ast.Value, er
 				U: operands[0].GetU() + operands[1].GetU(),
 			},
 		}, nil
-	case ast.Op_AND:
+	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")
 		}
@@ -167,13 +188,13 @@ func evaluateOp(op ast.Op, operands []*ast.Value, e Environment) (*ast.Value, er
 	return nil, fmt.Errorf("Invalid op: %s", op.String())
 }
 
-func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value, error) {
+func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.Value, error) {
 	if value.GetT() == ast.Value_NIL {
 		// Running GET on NIL values always results in NIL
 		return value, nil
 	}
 	switch field {
-	case ast.Field_CAPACITY:
+	case ast.Value_GET_CAPACITY:
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch capacity on non-cell value!")
 		}
@@ -181,7 +202,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[0], nil
-	case ast.Field_LOCK:
+	case ast.Value_GET_LOCK:
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch lock on non-cell value!")
 		}
@@ -189,7 +210,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[1], nil
-	case ast.Field_TYPE:
+	case ast.Value_GET_TYPE:
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch type on non-cell value!")
 		}
@@ -197,7 +218,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[2], nil
-	case ast.Field_DATA:
+	case ast.Value_GET_DATA:
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
 		}
@@ -205,7 +226,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[3], nil
-	case ast.Field_CODE_HASH:
+	case ast.Value_GET_CODE_HASH:
 		if value.GetT() != ast.Value_SCRIPT {
 			return nil, fmt.Errorf("Cannot fetch code hash on non-script value!")
 		}
@@ -213,7 +234,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of script items!")
 		}
 		return value.GetChildren()[0], nil
-	case ast.Field_HASH_TYPE:
+	case ast.Value_GET_HASH_TYPE:
 		if value.GetT() != ast.Value_SCRIPT {
 			return nil, fmt.Errorf("Cannot fetch hash type on non-script value!")
 		}
@@ -221,7 +242,7 @@ func evaluateOpGet(field ast.Field, value *ast.Value, e Environment) (*ast.Value
 			return nil, fmt.Errorf("Invalid number of script items!")
 		}
 		return value.GetChildren()[1], nil
-	case ast.Field_ARGS:
+	case ast.Value_GET_ARGS:
 		if value.GetT() != ast.Value_SCRIPT {
 			return nil, fmt.Errorf("Cannot fetch args on non-script value!")
 		}

@@ -4,46 +4,13 @@ package ast;
 
 option go_package = "github.com/xxuejie/animagus/pkg/ast";
 
-enum Field {
-  CAPACITY = 0;
-  DATA = 1;
-  LOCK = 2;
-  TYPE = 3;
-
-  CODE_HASH = 4;
-  HASH_TYPE = 5;
-  ARGS = 6;
-}
-
-enum Op {
-  HASH = 0;
-  NOT = 1;
-
-  GET = 2;
-  SLICE_BYTES = 3;
-  PLUS = 4;
-  MINUS = 5;
-  EQUAL = 6;
-  AND = 7;
-  OR = 8;
-  LESS = 9;
-  LESS_OR_EQUAL = 10;
-
-  LEN = 11;
-
-  INDEX = 12;
-}
-
 message Value {
   enum Type {
     // Primitive fields
     UINT64 = 0;
-    BOOL = 1;
-    BYTES = 2;
-    LIVE_CELL = 3;
-    FIELD = 4;
-    OP = 5;
-    NIL = 6;
+    NIL = 1;
+    BOOL = 2;
+    BYTES = 3;
 
     // In animagus, we distinguish args and params in the following way:
     // * If a Value struct contains an arg, it will be interpretted as a
@@ -52,25 +19,55 @@ message Value {
     // * Params, on the other hand, denotes user input when calling RPCs,
     // for example, a user might provide an amount to transfer, or an address
     // to transfer to, those will be represented via parameters
-    ARG = 17;
-    PARAM = 18;
+    ARG = 16;
+    PARAM = 17;
+    // Blockchain data structures
+    SCRIPT = 18;
+    CELL = 19;
+
+    // TODO: header & transaction data structures
 
     // Compound fields
-    LIST = 33;
-    APPLY = 34;
-    REDUCE = 35;
+    LIST = 22;
+    APPLY = 23;
+    REDUCE = 24;
 
-    // Blockchain data structures
-    SCRIPT = 65;
-    CELL = 66;
+    // Cell get operations
+    GET_CAPACITY = 48;
+    GET_DATA = 49;
+    GET_LOCK = 50;
+    GET_TYPE = 51;
+
+    // Script get operations
+    GET_CODE_HASH = 52;
+    GET_HASH_TYPE = 53;
+    GET_ARGS = 54;
+
+    // TODO: header & transaction get operations (18 in total)
+
+    // Operations
+    HASH = 73;
+
+    NOT = 74;
+    AND = 75;
+    OR = 76;
+    XOR = 77;
+
+    EQUAL = 78;
+    LESS = 79;
+
+    LEN = 80;
+    SLICE_BYTES = 81;
+    INDEX = 82;
+
+    PLUS = 83;
+    MINUS = 84;
   }
   Type t = 1;
   oneof primitive {
     bool b = 2;
     uint64 u = 3;
     bytes raw = 4;
-    Field field = 5;
-    Op op = 6;
   }
   List l = 7;
   repeated Value children = 8;
