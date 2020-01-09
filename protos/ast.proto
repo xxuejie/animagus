@@ -29,13 +29,13 @@ message Value {
 
     // Compound fields
     APPLY = 22;
-    REDUCE = 24;
+    REDUCE = 23;
 
     // List fields
-    LIST = 25;
-    MAP = 26;
-    FILTER = 27;
-    QUERY_CELLS = 28;
+    LIST = 24;
+    MAP = 25;
+    FILTER = 26;
+    QUERY_CELLS = 27;
 
     // Cell get operations
     GET_CAPACITY = 48;
