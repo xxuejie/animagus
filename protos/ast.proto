@@ -62,7 +62,7 @@ message Value {
     LESS = 79;
 
     LEN = 80;
-    SLICE_BYTES = 81;
+    SLICE = 81;
     INDEX = 82;
 
     PLUS = 83;

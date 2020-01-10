@@ -130,7 +130,7 @@ func main() {
 		cells,
 		fetch_field(ast.Value_GET_DATA, arg(0)),
 		&ast.Value{
-			T: ast.Value_SLICE_BYTES,
+			T: ast.Value_SLICE,
 			Children: []*ast.Value{
 				arg(0),
 				&ast.Value{
@@ -158,11 +158,20 @@ func main() {
 		},
 	}
 
+	truncatedBalance := &ast.Value{
+		T: ast.Value_SLICE,
+		Children: []*ast.Value{
+			uint_value(0),
+			uint_value(16),
+			balance,
+		},
+	}
+
 	root := &ast.Root{
 		Calls: []*ast.Call{
 			&ast.Call{
 				Name:   "balance",
-				Result: balance,
+				Result: truncatedBalance,
 			},
 		},
 	}
