@@ -22,33 +22,33 @@ message Value {
     ARG = 16;
     PARAM = 17;
     // Blockchain data structures
-    SCRIPT = 18;
-    CELL = 19;
-
-    // TODO: header & transaction data structures
+    OUT_POINT = 18;
+    CELL_DEP = 19;
+    SCRIPT = 20;
+    CELL = 21;
+    TRANSACTION = 22;
 
     // Compound fields
-    APPLY = 22;
-    REDUCE = 23;
+    APPLY = 23;
+    REDUCE = 24;
 
     // List fields
-    LIST = 24;
-    MAP = 25;
-    FILTER = 26;
-    QUERY_CELLS = 27;
+    LIST = 25;
+    QUERY_CELLS = 26;
+    MAP = 27;
+    FILTER = 28;
 
     // Cell get operations
     GET_CAPACITY = 48;
     GET_DATA = 49;
     GET_LOCK = 50;
     GET_TYPE = 51;
+    GET_DATA_HASH = 52;
 
     // Script get operations
-    GET_CODE_HASH = 52;
-    GET_HASH_TYPE = 53;
-    GET_ARGS = 54;
-
-    // TODO: header & transaction get operations (18 in total)
+    GET_CODE_HASH = 53;
+    GET_HASH_TYPE = 54;
+    GET_ARGS = 55;
 
     // Operations
     HASH = 73;
