@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/xxuejie/animagus/pkg/ast"
 )
 
@@ -27,7 +28,7 @@ func NewValueContext(name string, value *ast.Value) (ValueContext, error) {
 
 func (c ValueContext) QueryIndex(query *ast.Value) int {
 	for i, q := range c.Queries {
-		if query == q {
+		if proto.Equal(query, q) {
 			return i
 		}
 	}
@@ -61,6 +62,11 @@ func (c ValueContext) IndexKey(queryIndex int, params []*ast.Value) (string, err
 
 func visitValue(value *ast.Value, context *ValueContext) error {
 	if value.GetT() == ast.Value_QUERY_CELLS {
+		for _, q := range context.Queries {
+			if proto.Equal(q, value) {
+				return nil
+			}
+		}
 		context.Queries = append(context.Queries, value)
 		return nil
 	}
