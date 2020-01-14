@@ -209,21 +209,18 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		start := int(operands[0].GetU())
 		end := int(operands[1].GetU())
 		source := operands[2].GetRaw()
+		result := make([]byte, end - start)
 		if start > len(source) {
-			return &ast.Value{
-				T: ast.Value_BYTES,
-				Primitive: &ast.Value_Raw{
-					Raw: []byte{},
-				},
-			}, nil
+			return nil, fmt.Errorf("Invalid slice start: %d!", start)
 		}
 		if end > len(source) {
 			end = len(source)
 		}
+		copy(result, source[start:end])
 		return &ast.Value{
 			T: ast.Value_BYTES,
 			Primitive: &ast.Value_Raw{
-				Raw: source[start:end],
+				Raw: result,
 			},
 		}, nil
 	}
