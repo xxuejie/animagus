@@ -1,4 +1,4 @@
 animagus
-examples/balance/balance.bin
-examples/balance/balance.txt
-examples/balance/*_pb.rb
+examples/*/*.bin
+examples/*/*.txt
+/ruby/

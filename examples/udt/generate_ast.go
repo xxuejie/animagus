@@ -13,8 +13,7 @@ var (
 	SecpTypeHash = []byte{0x9b, 0xd7, 0xe0, 0x6f, 0x3e, 0xcf, 0x4b, 0xe0, 0xf2, 0xfc, 0xd2, 0x18, 0x8b, 0x23, 0xf1, 0xb9, 0xfc, 0xc8, 0x8e, 0x5d, 0x4b, 0x65, 0xa8, 0x63, 0x7b, 0x17, 0x72, 0x3b, 0xbd, 0xa3, 0xcc, 0xe8}
 	SecpCellDep  = []byte{0x71, 0xa7, 0xba, 0x8f, 0xc9, 0x63, 0x49, 0xfe, 0xa0, 0xed, 0x3a, 0x5c, 0x47, 0x99, 0x2e, 0x3b, 0x40, 0x84, 0xb0, 0x31, 0xa4, 0x22, 0x64, 0xa0, 0x18, 0xe0, 0x07, 0x2e, 0x81, 0x72, 0xe4, 0x6c}
 
-	UdtCodeHash   = []byte{0x57, 0xdd, 0x00, 0x67, 0x81, 0x4d, 0xab, 0x35, 0x6e, 0x05, 0xc6, 0xde, 0xf0, 0xd0, 0x94, 0xbb, 0x79, 0x77, 0x67, 0x11, 0xe6, 0x8f, 0xfd, 0xfa, 0xd2, 0xdf, 0x6a, 0x7f, 0x87, 0x7f, 0x7d, 0xb6}
-	UdtScriptHash = []byte{0x41, 0x37, 0x0c, 0x40, 0xe3, 0xb3, 0xcf, 0x76, 0xab, 0x9a, 0x8a, 0x25, 0xe3, 0xd7, 0xad, 0x50, 0xb1, 0xc8, 0x28, 0xb9, 0x16, 0x3f, 0xfb, 0x3e, 0xab, 0x8f, 0x28, 0x1b, 0x39, 0x3e, 0xd5, 0xe6}
+	UdtCodeHash = []byte{0x57, 0xdd, 0x00, 0x67, 0x81, 0x4d, 0xab, 0x35, 0x6e, 0x05, 0xc6, 0xde, 0xf0, 0xd0, 0x94, 0xbb, 0x79, 0x77, 0x67, 0x11, 0xe6, 0x8f, 0xfd, 0xfa, 0xd2, 0xdf, 0x6a, 0x7f, 0x87, 0x7f, 0x7d, 0xb6}
 )
 
 func fetch_field(field ast.Value_Type, value *ast.Value) *ast.Value {
@@ -98,22 +97,25 @@ func isDefaultSecpCell(argIndex uint64) *ast.Value {
 		fetch_field(ast.Value_GET_HASH_TYPE, lock),
 		uint_value(1))
 
-	args_test := equal(fetch_field(ast.Value_GET_ARGS, lock), param(0))
+	args_test := equal(fetch_field(ast.Value_GET_ARGS, lock), param(1))
 
 	return and(code_hash_test, hash_type_test, args_test)
 }
 
-func isSimpleUdtCell(argIndex uint64) *ast.Value {
+func isSimpleUdtCell(argIndex uint64, paramIndex uint64) *ast.Value {
 	t := fetch_field(ast.Value_GET_TYPE, arg(argIndex))
-	return equal(
-		&ast.Value{
-			T: ast.Value_HASH,
-			Children: []*ast.Value{
-				t,
-			},
-		},
-		bytes_value(UdtScriptHash),
-	)
+
+	code_hash_test := equal(
+		fetch_field(ast.Value_GET_CODE_HASH, t),
+		bytes_value(UdtCodeHash))
+
+	hash_type_test := equal(
+		fetch_field(ast.Value_GET_HASH_TYPE, t),
+		uint_value(0))
+
+	args_test := equal(fetch_field(ast.Value_GET_ARGS, t), param(paramIndex))
+
+	return and(code_hash_test, hash_type_test, args_test)
 }
 
 func assembleSecpLock(paramIndex uint64) *ast.Value {
@@ -179,7 +181,7 @@ func main() {
 	cells := &ast.Value{
 		T: ast.Value_QUERY_CELLS,
 		Children: []*ast.Value{
-			and(isDefaultSecpCell(0), isSimpleUdtCell(0)),
+			and(isDefaultSecpCell(0), isSimpleUdtCell(0, 0)),
 		},
 	}
 
@@ -189,13 +191,9 @@ func main() {
 		&ast.Value{
 			T: ast.Value_SLICE,
 			Children: []*ast.Value{
+				uint_value(0),
+				uint_value(16),
 				arg(0),
-				&ast.Value{
-					T: ast.Value_UINT64,
-					Primitive: &ast.Value_U{
-						U: 16,
-					},
-				},
 			},
 		},
 	)
@@ -247,7 +245,7 @@ func main() {
 		T: ast.Value_PLUS,
 		Children: []*ast.Value{
 			bytes_value([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			param(2),
+			param(3),
 		},
 	}
 
@@ -271,7 +269,7 @@ func main() {
 		T: ast.Value_CELL,
 		Children: []*ast.Value{
 			uint_value(94),
-			assembleSecpLock(1),
+			assembleSecpLock(2),
 			assembleUdtType(),
 			transferTokens,
 		},
@@ -281,7 +279,7 @@ func main() {
 		T: ast.Value_CELL,
 		Children: []*ast.Value{
 			changeCapacities,
-			assembleSecpLock(0),
+			assembleSecpLock(1),
 			assembleUdtType(),
 			changeTokens,
 		},

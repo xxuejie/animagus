@@ -164,6 +164,11 @@ query($blockNumber: String) {
               hash_type
               args
             }
+            type {
+              code_hash
+              hash_type
+              args
+            }
           }
           cell_data {
             content
@@ -175,6 +180,11 @@ query($blockNumber: String) {
       outputs {
         capacity
         lock {
+          code_hash
+          hash_type
+          args
+        }
+        type {
           code_hash
           hash_type
           args

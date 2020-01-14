@@ -8,6 +8,11 @@ proto:
 	protoc -I protos protos/ast.proto --go_out=plugins=grpc,paths=source_relative:./pkg/ast
 	protoc -I protos protos/generic.proto --go_out=plugins=grpc,paths=source_relative:./pkg/generic
 
+proto-ruby:
+	mkdir -p ruby
+	grpc_tools_ruby_protoc -I protos --ruby_out=ruby --grpc_out=ruby protos/ast.proto
+	grpc_tools_ruby_protoc -I protos --ruby_out=ruby --grpc_out=ruby protos/generic.proto
+
 download:
 	@echo Download go.mod dependencies
 	go mod download
@@ -19,4 +24,4 @@ install-tools: download
 ci-fmt: fmt
 	git diff --exit-code
 
-.PHONY: fmt proto test download install-tools ci-fmt
+.PHONY: fmt proto proto-ruby test download install-tools ci-fmt

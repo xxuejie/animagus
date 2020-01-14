@@ -2,9 +2,11 @@ package executor
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xxuejie/animagus/pkg/ast"
+	"github.com/xxuejie/animagus/pkg/rpctypes"
 )
 
 type Environment interface {
@@ -123,6 +125,12 @@ func evaluateAstValues(values []*ast.Value, e Environment) ([]*ast.Value, error)
 
 func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.Value, error) {
 	switch op {
+	case ast.Value_HASH:
+		if len(operands) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to HASH")
+		}
+		h, err := evaluateHash(operands[0])
+		return h, err
 	case ast.Value_EQUAL:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
@@ -151,16 +159,24 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to PLUS")
 		}
-		if operands[0].GetT() != ast.Value_UINT64 ||
-			operands[1].GetT() != ast.Value_UINT64 {
-			return nil, fmt.Errorf("Both operands must be uint64 in PLUS!")
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			return &ast.Value{
+				T: ast.Value_UINT64,
+				Primitive: &ast.Value_U{
+					U: operands[0].GetU() + operands[1].GetU(),
+				},
+			}, nil
 		}
-		return &ast.Value{
-			T: ast.Value_UINT64,
-			Primitive: &ast.Value_U{
-				U: operands[0].GetU() + operands[1].GetU(),
-			},
-		}, nil
+		a, err := valueToBigInt(operands[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := valueToBigInt(operands[1])
+		if err != nil {
+			return nil, err
+		}
+		return bigIntToValue(new(big.Int).Add(a, b)), nil
 	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")
@@ -179,6 +195,35 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			T: ast.Value_BOOL,
 			Primitive: &ast.Value_B{
 				B: result,
+			},
+		}, nil
+	case ast.Value_SLICE:
+		if len(operands) != 3 {
+			return nil, fmt.Errorf("Invalid number of operands to SLICE")
+		}
+		if operands[0].GetT() != ast.Value_UINT64 ||
+			operands[1].GetT() != ast.Value_UINT64 ||
+			operands[2].GetT() != ast.Value_BYTES {
+			return nil, fmt.Errorf("Invalid operand type to SLICE")
+		}
+		start := int(operands[0].GetU())
+		end := int(operands[1].GetU())
+		source := operands[2].GetRaw()
+		if start > len(source) {
+			return &ast.Value{
+				T: ast.Value_BYTES,
+				Primitive: &ast.Value_Raw{
+					Raw: []byte{},
+				},
+			}, nil
+		}
+		if end > len(source) {
+			end = len(source)
+		}
+		return &ast.Value{
+			T: ast.Value_BYTES,
+			Primitive: &ast.Value_Raw{
+				Raw: source[start:end],
 			},
 		}, nil
 	}
@@ -223,28 +268,40 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[3], nil
-	case ast.Value_GET_CODE_HASH:
-		if value.GetT() != ast.Value_SCRIPT {
-			return nil, fmt.Errorf("Cannot fetch code hash on non-script value!")
+	case ast.Value_GET_DATA_HASH:
+		if value.GetT() != ast.Value_CELL {
+			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
 		}
-		if len(value.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Invalid number of script items!")
+		if len(value.GetChildren()) != 4 {
+			return nil, fmt.Errorf("Invalid number of cell items!")
+		}
+		data := value.GetChildren()[3]
+		if data.GetT() != ast.Value_BYTES {
+			return nil, fmt.Errorf("Invalid data value type: %s", data.GetT().String())
+		}
+		h, err := rpctypes.CalculateHash(rpctypes.Raw(data.GetRaw()))
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T: ast.Value_BYTES,
+			Primitive: &ast.Value_Raw{
+				Raw: h,
+			},
+		}, nil
+	case ast.Value_GET_CODE_HASH:
+		if err := validateScript(value); err != nil {
+			return nil, err
 		}
 		return value.GetChildren()[0], nil
 	case ast.Value_GET_HASH_TYPE:
-		if value.GetT() != ast.Value_SCRIPT {
-			return nil, fmt.Errorf("Cannot fetch hash type on non-script value!")
-		}
-		if len(value.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Invalid number of script items!")
+		if err := validateScript(value); err != nil {
+			return nil, err
 		}
 		return value.GetChildren()[1], nil
 	case ast.Value_GET_ARGS:
-		if value.GetT() != ast.Value_SCRIPT {
-			return nil, fmt.Errorf("Cannot fetch args on non-script value!")
-		}
-		if len(value.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Invalid number of script items!")
+		if err := validateScript(value); err != nil {
+			return nil, err
 		}
 		return value.GetChildren()[2], nil
 	}
@@ -277,4 +334,83 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 		return e.QueryCell(list)
 	}
 	return nil, fmt.Errorf("Invalid list type: %s", list.GetT().String())
+}
+
+func evaluateHash(value *ast.Value) (*ast.Value, error) {
+	if value.GetT() == ast.Value_NIL {
+		// TODO: Running HASH on NIL values always results in NIL, this might hit
+		// problems in the future, ideally we should change this once conditionals
+		// are better supported.
+		return value, nil
+	}
+	switch value.GetT() {
+	case ast.Value_SCRIPT:
+		if err := validateScript(value); err != nil {
+			return nil, err
+		}
+		script := rpctypes.Script{
+			HashType: rpctypes.ScriptHashType(value.GetChildren()[1].GetU()),
+			Args:     rpctypes.Bytes(value.GetChildren()[2].GetRaw()),
+		}
+		copy(script.CodeHash[:], value.GetChildren()[0].GetRaw())
+		h, err := rpctypes.CalculateHash(script)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T: ast.Value_BYTES,
+			Primitive: &ast.Value_Raw{
+				Raw: h,
+			},
+		}, nil
+	}
+	return nil, fmt.Errorf("Invalid value type: %s, cannot calculate hash", value.GetT().String())
+}
+
+func validateScript(value *ast.Value) error {
+	if value.GetT() != ast.Value_SCRIPT {
+		return fmt.Errorf("Invalid script type!")
+	}
+	if len(value.GetChildren()) != 3 {
+		return fmt.Errorf("Invalid number of script items!")
+	}
+	if value.GetChildren()[0].GetT() != ast.Value_BYTES ||
+		len(value.GetChildren()[0].GetRaw()) != 32 ||
+		value.GetChildren()[1].GetT() != ast.Value_UINT64 ||
+		value.GetChildren()[2].GetT() != ast.Value_BYTES {
+		return fmt.Errorf("Invalid child type!")
+	}
+	return nil
+}
+
+func valueToBigInt(value *ast.Value) (*big.Int, error) {
+	i := new(big.Int)
+	if value.GetT() == ast.Value_BYTES {
+		a := make([]byte, len(value.GetRaw()))
+		copy(a, value.GetRaw())
+		for i := len(a)/2 - 1; i >= 0; i-- {
+			opp := len(a) - 1 - i
+			a[i], a[opp] = a[opp], a[i]
+		}
+		i.SetBytes(a)
+	} else if value.GetT() == ast.Value_UINT64 {
+		i.SetUint64(value.GetU())
+	} else {
+		return nil, fmt.Errorf("Cannot convert value type %s to big int!", value.GetT().String())
+	}
+	return i, nil
+}
+
+func bigIntToValue(i *big.Int) *ast.Value {
+	a := i.Bytes()
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		opp := len(a) - 1 - i
+		a[i], a[opp] = a[opp], a[i]
+	}
+	return &ast.Value{
+		T: ast.Value_BYTES,
+		Primitive: &ast.Value_Raw{
+			Raw: a,
+		},
+	}
 }

@@ -111,6 +111,11 @@ query {
         hash_type
         args
       }
+      type {
+        code_hash
+        hash_type
+        args
+      }
     }
     cell_data {
       content
