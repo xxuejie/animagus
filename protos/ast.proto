@@ -54,21 +54,22 @@ message Value {
 
     // Operations
     HASH = 73;
+    SERIALIZE = 74;
 
-    NOT = 74;
-    AND = 75;
-    OR = 76;
-    XOR = 77;
+    NOT = 75;
+    AND = 76;
+    OR = 77;
+    XOR = 78;
 
-    EQUAL = 78;
-    LESS = 79;
+    EQUAL = 79;
+    LESS = 80;
 
-    LEN = 80;
-    SLICE = 81;
-    INDEX = 82;
+    LEN = 81;
+    SLICE = 82;
+    INDEX = 83;
 
-    PLUS = 83;
-    MINUS = 84;
+    PLUS = 84;
+    MINUS = 85;
   }
   Type t = 1;
   oneof primitive {

@@ -145,13 +145,13 @@ func assembleSecpCellDep() *ast.Value {
 	}
 }
 
-func assembleUdtType() *ast.Value {
+func assembleUdtType(paramIndex uint64) *ast.Value {
 	return &ast.Value{
 		T: ast.Value_SCRIPT,
 		Children: []*ast.Value{
 			bytes_value(UdtCodeHash),
 			uint_value(0),
-			bytes_value([]byte{}),
+			param(paramIndex),
 		},
 	}
 }
@@ -242,18 +242,32 @@ func main() {
 
 	// This helps cast uint64 values to bytes to make it handy.
 	transferTokens := &ast.Value{
-		T: ast.Value_PLUS,
+		T: ast.Value_SLICE,
 		Children: []*ast.Value{
-			bytes_value([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			param(3),
+			uint_value(0),
+			uint_value(16),
+			&ast.Value{
+				T: ast.Value_PLUS,
+				Children: []*ast.Value{
+					bytes_value([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
+					param(3),
+				},
+			},
 		},
 	}
 
 	changeTokens := &ast.Value{
-		T: ast.Value_MINUS,
+		T: ast.Value_SLICE,
 		Children: []*ast.Value{
-			balance,
-			transferTokens,
+			uint_value(0),
+			uint_value(16),
+			&ast.Value{
+				T: ast.Value_MINUS,
+				Children: []*ast.Value{
+					balance,
+					transferTokens,
+				},
+			},
 		},
 	}
 
@@ -270,7 +284,7 @@ func main() {
 		Children: []*ast.Value{
 			uint_value(94),
 			assembleSecpLock(2),
-			assembleUdtType(),
+			assembleUdtType(0),
 			transferTokens,
 		},
 	}
@@ -280,7 +294,7 @@ func main() {
 		Children: []*ast.Value{
 			changeCapacities,
 			assembleSecpLock(1),
-			assembleUdtType(),
+			assembleUdtType(0),
 			changeTokens,
 		},
 	}
@@ -313,6 +327,11 @@ func main() {
 		},
 	}
 
+	serializedTransaction := &ast.Value{
+		T:        ast.Value_SERIALIZE,
+		Children: []*ast.Value{transaction},
+	}
+
 	root := &ast.Root{
 		Calls: []*ast.Call{
 			&ast.Call{
@@ -325,7 +344,7 @@ func main() {
 			},
 			&ast.Call{
 				Name:   "transfer",
-				Result: transaction,
+				Result: serializedTransaction,
 			},
 		},
 	}

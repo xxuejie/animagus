@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -134,7 +135,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 						&ast.Value{
 							T: ast.Value_UINT64,
 							Primitive: &ast.Value_U{
-								U: 1,
+								U: 0,
 							},
 						},
 					},
@@ -158,25 +159,45 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			},
 		}, nil
 	case ast.Value_CELL:
-		if len(expr.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Not enough arguments for cell!")
+		value, err := evaluateChildren(expr, e)
+		if err != nil {
+			return nil, err
 		}
-		return evaluateChildren(expr, e)
+		err = ast.IsValidCell(value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	case ast.Value_SCRIPT:
-		if len(expr.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Not enough arguments for script!")
+		value, err := evaluateChildren(expr, e)
+		if err != nil {
+			return nil, err
 		}
-		return evaluateChildren(expr, e)
+		err = ast.IsValidScript(value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	case ast.Value_CELL_DEP:
-		if len(expr.GetChildren()) != 2 {
-			return nil, fmt.Errorf("Not enough arguments for cell dep!")
+		value, err := evaluateChildren(expr, e)
+		if err != nil {
+			return nil, err
 		}
-		return evaluateChildren(expr, e)
+		err = ast.IsValidCellDep(value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	case ast.Value_OUT_POINT:
-		if len(expr.GetChildren()) != 2 {
-			return nil, fmt.Errorf("Not enough arguments for out point!")
+		value, err := evaluateChildren(expr, e)
+		if err != nil {
+			return nil, err
 		}
-		return evaluateChildren(expr, e)
+		err = ast.IsValidOutPoint(value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	case ast.Value_APPLY:
 		if len(expr.GetChildren()) < 1 {
 			return nil, fmt.Errorf("Not enough arguments for apply!")
@@ -248,8 +269,12 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		if len(operands) != 1 {
 			return nil, fmt.Errorf("Invalid number of operands to HASH")
 		}
-		h, err := evaluateHash(operands[0])
-		return h, err
+		return evaluateHash(operands[0])
+	case ast.Value_SERIALIZE:
+		if len(operands) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to HASH")
+		}
+		return evaluateSerialize(operands[0])
 	case ast.Value_EQUAL:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
@@ -391,44 +416,14 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 	}
 	switch field {
 	case ast.Value_GET_CAPACITY:
-		if value.GetT() != ast.Value_CELL {
-			return nil, fmt.Errorf("Cannot fetch capacity on non-cell value!")
-		}
-		if len(value.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Invalid number of cell items!")
-		}
 		return value.GetChildren()[0], nil
 	case ast.Value_GET_LOCK:
-		if value.GetT() != ast.Value_CELL {
-			return nil, fmt.Errorf("Cannot fetch lock on non-cell value!")
-		}
-		if len(value.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Invalid number of cell items!")
-		}
 		return value.GetChildren()[1], nil
 	case ast.Value_GET_TYPE:
-		if value.GetT() != ast.Value_CELL {
-			return nil, fmt.Errorf("Cannot fetch type on non-cell value!")
-		}
-		if len(value.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Invalid number of cell items!")
-		}
 		return value.GetChildren()[2], nil
 	case ast.Value_GET_DATA:
-		if value.GetT() != ast.Value_CELL {
-			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
-		}
-		if len(value.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Invalid number of cell items!")
-		}
 		return value.GetChildren()[3], nil
 	case ast.Value_GET_DATA_HASH:
-		if value.GetT() != ast.Value_CELL {
-			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
-		}
-		if len(value.GetChildren()) < 4 {
-			return nil, fmt.Errorf("Invalid number of cell items!")
-		}
 		data := value.GetChildren()[3]
 		if data.GetT() != ast.Value_BYTES {
 			return nil, fmt.Errorf("Invalid data value type: %s", data.GetT().String())
@@ -444,19 +439,10 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 			},
 		}, nil
 	case ast.Value_GET_CODE_HASH:
-		if err := validateScript(value); err != nil {
-			return nil, err
-		}
 		return value.GetChildren()[0], nil
 	case ast.Value_GET_HASH_TYPE:
-		if err := validateScript(value); err != nil {
-			return nil, err
-		}
 		return value.GetChildren()[1], nil
 	case ast.Value_GET_ARGS:
-		if err := validateScript(value); err != nil {
-			return nil, err
-		}
 		return value.GetChildren()[2], nil
 	}
 	return nil, fmt.Errorf("Invalid get field: %s", field.String())
@@ -501,7 +487,7 @@ func evaluateHash(value *ast.Value) (*ast.Value, error) {
 	}
 	switch value.GetT() {
 	case ast.Value_SCRIPT:
-		if err := validateScript(value); err != nil {
+		if err := ast.IsValidScript(value); err != nil {
 			return nil, err
 		}
 		script := rpctypes.Script{
@@ -523,20 +509,25 @@ func evaluateHash(value *ast.Value) (*ast.Value, error) {
 	return nil, fmt.Errorf("Invalid value type: %s, cannot calculate hash", value.GetT().String())
 }
 
-func validateScript(value *ast.Value) error {
-	if value.GetT() != ast.Value_SCRIPT {
-		return fmt.Errorf("Invalid script type!")
+func evaluateSerialize(value *ast.Value) (*ast.Value, error) {
+	switch value.GetT() {
+	case ast.Value_TRANSACTION:
+		tx, err := ast.RestoreTransaction(value, true)
+		if err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(tx)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T: ast.Value_BYTES,
+			Primitive: &ast.Value_Raw{
+				Raw: data,
+			},
+		}, nil
 	}
-	if len(value.GetChildren()) != 3 {
-		return fmt.Errorf("Invalid number of script items!")
-	}
-	if value.GetChildren()[0].GetT() != ast.Value_BYTES ||
-		len(value.GetChildren()[0].GetRaw()) != 32 ||
-		value.GetChildren()[1].GetT() != ast.Value_UINT64 ||
-		value.GetChildren()[2].GetT() != ast.Value_BYTES {
-		return fmt.Errorf("Invalid child type!")
-	}
-	return nil
+	return nil, fmt.Errorf("Invalid value type: %s", value.GetT().String())
 }
 
 func valueToBigInt(value *ast.Value) (*big.Int, error) {

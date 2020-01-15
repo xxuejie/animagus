@@ -1,5 +1,6 @@
 $LOAD_PATH.unshift(File.expand_path(File.join(File.dirname(__FILE__), "..", "..", "ruby")))
 
+require "json"
 require "grpc"
 require "generic_services_pb"
 
@@ -34,7 +35,7 @@ def main
       ),
       Ast::Value.new(
         t: Ast::Value::Type::BYTES,
-        raw: hex_to_bin(ARGV[3])
+        raw: hex_to_bin(ARGV[2])
       ),
       Ast::Value.new(
         t: Ast::Value::Type::UINT64,
@@ -44,6 +45,7 @@ def main
   )
   response = stub.call(request)
   p response
+  puts JSON.pretty_generate(JSON.parse(response.raw))
 end
 
 main
