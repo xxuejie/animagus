@@ -44,11 +44,12 @@ message Value {
     GET_LOCK = 50;
     GET_TYPE = 51;
     GET_DATA_HASH = 52;
+    GET_OUT_POINT = 53;
 
     // Script get operations
-    GET_CODE_HASH = 53;
-    GET_HASH_TYPE = 54;
-    GET_ARGS = 55;
+    GET_CODE_HASH = 54;
+    GET_HASH_TYPE = 55;
+    GET_ARGS = 56;
 
     // Operations
     HASH = 73;

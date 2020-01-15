@@ -3,15 +3,17 @@ package indexer
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xxuejie/animagus/pkg/ast"
 )
 
 type ValueContext struct {
-	Name    string
-	Value   *ast.Value
-	Queries []*ast.Value
+	Name        string
+	Value       *ast.Value
+	Queries     []*ast.Value
+	QueryParams [][]int
 }
 
 func NewValueContext(name string, value *ast.Value) (ValueContext, error) {
@@ -35,13 +37,18 @@ func (c ValueContext) QueryIndex(query *ast.Value) int {
 	return -1
 }
 
-func (c ValueContext) IndexKey(queryIndex int, params []*ast.Value) (string, error) {
+func (c ValueContext) IndexKey(queryIndex int, paramValues map[int]*ast.Value) (string, error) {
+	params := c.QueryParams[queryIndex]
 	var buffer bytes.Buffer
 	_, err := buffer.WriteString(fmt.Sprintf("%d", len(params)))
 	if err != nil {
 		return "", err
 	}
-	for _, value := range params {
+	for i := range params {
+		value, found := paramValues[i]
+		if !found {
+			return "", fmt.Errorf("Requested param index %d is not provided!", i)
+		}
 		switch value.GetT() {
 		case ast.Value_UINT64:
 			_, err = buffer.WriteString(fmt.Sprintf("n%d", value.GetU()))
@@ -67,7 +74,15 @@ func visitValue(value *ast.Value, context *ValueContext) error {
 				return nil
 			}
 		}
+		paramSet := make(map[int]bool)
+		gatherQueryParams(value, &paramSet)
+		params := make([]int, 0, len(paramSet))
+		for k := range paramSet {
+			params = append(params, k)
+		}
+		sort.Ints(params)
 		context.Queries = append(context.Queries, value)
+		context.QueryParams = append(context.QueryParams, params)
 		return nil
 	}
 	for _, child := range value.GetChildren() {
@@ -77,4 +92,14 @@ func visitValue(value *ast.Value, context *ValueContext) error {
 		}
 	}
 	return nil
+}
+
+func gatherQueryParams(value *ast.Value, paramSet *map[int]bool) {
+	if value.GetT() == ast.Value_PARAM {
+		(*paramSet)[int(value.GetU())] = true
+		return
+	}
+	for _, child := range value.GetChildren() {
+		gatherQueryParams(child, paramSet)
+	}
 }

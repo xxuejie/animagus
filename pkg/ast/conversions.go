@@ -30,7 +30,27 @@ func ConvertScript(script rpctypes.Script) *Value {
 	}
 }
 
-func ConvertCell(cell rpctypes.CellOutput, cellData rpctypes.Raw) *Value {
+func ConvertOutPoint(outPoint rpctypes.OutPoint) *Value {
+	return &Value{
+		T: Value_OUT_POINT,
+		Children: []*Value{
+			&Value{
+				T: Value_BYTES,
+				Primitive: &Value_Raw{
+					Raw: outPoint.TxHash[:],
+				},
+			},
+			&Value{
+				T: Value_UINT64,
+				Primitive: &Value_U{
+					U: uint64(outPoint.Index),
+				},
+			},
+		},
+	}
+}
+
+func ConvertCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint) *Value {
 	typeScript := &Value{T: Value_NIL}
 	if cell.Type != nil {
 		typeScript = ConvertScript(*cell.Type)
@@ -52,6 +72,7 @@ func ConvertCell(cell rpctypes.CellOutput, cellData rpctypes.Raw) *Value {
 					Raw: cellData,
 				},
 			},
+			ConvertOutPoint(outPoint),
 		},
 	}
 }

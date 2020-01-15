@@ -32,10 +32,24 @@ func isGetOp(expr *ast.Value) bool {
 	return expr.GetT() >= ast.Value_GET_CAPACITY && expr.GetT() < ast.Value_HASH
 }
 
+func isListOp(expr *ast.Value) bool {
+	return expr.GetT() >= ast.Value_LIST && expr.GetT() < ast.Value_GET_CAPACITY
+}
+
 func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 	// Primitive value
 	if isPrimitive(expr) {
 		return expr, nil
+	}
+	if isListOp(expr) {
+		list, err := evaluateList(expr, e)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T:        ast.Value_LIST,
+			Children: list,
+		}, nil
 	}
 	if isOp(expr) {
 		children, err := evaluateAstValues(expr.GetChildren(), e)
@@ -69,6 +83,50 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			return nil, fmt.Errorf("Cannot find param index %d!", index)
 		}
 		return param, nil
+	case ast.Value_TRANSACTION:
+		if len(expr.GetChildren()) != 3 {
+			return nil, fmt.Errorf("Not enough arguments for transaction!")
+		}
+		inputs, err := convertCellToOutPoint(expr.GetChildren()[0], e)
+		if err != nil {
+			return nil, err
+		}
+		outputs, err := evaluateValue(expr.GetChildren()[1], e)
+		if err != nil {
+			return nil, err
+		}
+		dep_cells, err := convertCellToOutPoint(expr.GetChildren()[2], e)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T: ast.Value_TRANSACTION,
+			Children: []*ast.Value{
+				inputs,
+				outputs,
+				dep_cells,
+			},
+		}, nil
+	case ast.Value_CELL:
+		if len(expr.GetChildren()) < 4 {
+			return nil, fmt.Errorf("Not enough arguments for cell!")
+		}
+		return evaluateChildren(expr, e)
+	case ast.Value_SCRIPT:
+		if len(expr.GetChildren()) != 3 {
+			return nil, fmt.Errorf("Not enough arguments for script!")
+		}
+		return evaluateChildren(expr, e)
+	case ast.Value_CELL_DEP:
+		if len(expr.GetChildren()) != 2 {
+			return nil, fmt.Errorf("Not enough arguments for cell dep!")
+		}
+		return evaluateChildren(expr, e)
+	case ast.Value_OUT_POINT:
+		if len(expr.GetChildren()) != 2 {
+			return nil, fmt.Errorf("Not enough arguments for out point!")
+		}
+		return evaluateChildren(expr, e)
 	case ast.Value_APPLY:
 		if len(expr.GetChildren()) < 1 {
 			return nil, fmt.Errorf("Not enough arguments for apply!")
@@ -109,6 +167,17 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		return currentValue, nil
 	}
 	return nil, fmt.Errorf("Invalid value type: %s", expr.GetT().String())
+}
+
+func evaluateChildren(value *ast.Value, e Environment) (*ast.Value, error) {
+	children, err := evaluateAstValues(value.GetChildren(), e)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.Value{
+		T:        value.GetT(),
+		Children: children,
+	}, nil
 }
 
 func evaluateAstValues(values []*ast.Value, e Environment) ([]*ast.Value, error) {
@@ -177,6 +246,28 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, err
 		}
 		return bigIntToValue(new(big.Int).Add(a, b)), nil
+	case ast.Value_MINUS:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to MINUS")
+		}
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			return &ast.Value{
+				T: ast.Value_UINT64,
+				Primitive: &ast.Value_U{
+					U: operands[0].GetU() - operands[1].GetU(),
+				},
+			}, nil
+		}
+		a, err := valueToBigInt(operands[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := valueToBigInt(operands[1])
+		if err != nil {
+			return nil, err
+		}
+		return bigIntToValue(new(big.Int).Sub(a, b)), nil
 	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")
@@ -223,6 +314,22 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 				Raw: result,
 			},
 		}, nil
+	case ast.Value_INDEX:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to INDEX")
+		}
+		if operands[0].GetT() != ast.Value_UINT64 {
+			return nil, fmt.Errorf("Invalid operand type to INDEX")
+		}
+		list, err := evaluateList(operands[1], e)
+		if err != nil {
+			return nil, err
+		}
+		i := int(operands[0].GetU())
+		if i < 0 || i >= len(list) {
+			return nil, fmt.Errorf("Index out of range!")
+		}
+		return list[i], nil
 	}
 	return nil, fmt.Errorf("Invalid op: %s", op.String())
 }
@@ -237,7 +344,7 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch capacity on non-cell value!")
 		}
-		if len(value.GetChildren()) != 4 {
+		if len(value.GetChildren()) < 4 {
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[0], nil
@@ -245,7 +352,7 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch lock on non-cell value!")
 		}
-		if len(value.GetChildren()) != 4 {
+		if len(value.GetChildren()) < 4 {
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[1], nil
@@ -253,7 +360,7 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch type on non-cell value!")
 		}
-		if len(value.GetChildren()) != 4 {
+		if len(value.GetChildren()) < 4 {
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[2], nil
@@ -261,7 +368,7 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
 		}
-		if len(value.GetChildren()) != 4 {
+		if len(value.GetChildren()) < 4 {
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		return value.GetChildren()[3], nil
@@ -269,7 +376,7 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 		if value.GetT() != ast.Value_CELL {
 			return nil, fmt.Errorf("Cannot fetch data on non-cell value!")
 		}
-		if len(value.GetChildren()) != 4 {
+		if len(value.GetChildren()) < 4 {
 			return nil, fmt.Errorf("Invalid number of cell items!")
 		}
 		data := value.GetChildren()[3]
@@ -307,6 +414,8 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 
 func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 	switch list.GetT() {
+	case ast.Value_LIST:
+		return evaluateAstValues(list.GetChildren(), e)
 	case ast.Value_MAP:
 		if len(list.GetChildren()) != 2 {
 			return nil, fmt.Errorf("Invalid number of lists for map!")
@@ -410,4 +519,35 @@ func bigIntToValue(i *big.Int) *ast.Value {
 			Raw: a,
 		},
 	}
+}
+
+func convertCellToOutPoint(value *ast.Value, e Environment) (*ast.Value, error) {
+	if isListOp(value) {
+		list, err := evaluateList(value, e)
+		if err != nil {
+			return nil, err
+		}
+		outPoints := make([]*ast.Value, len(list))
+		for i, child := range list {
+			outPoint, err := convertCellToOutPoint(child, e)
+			if err != nil {
+				return nil, err
+			}
+			outPoints[i] = outPoint
+		}
+		return &ast.Value{
+			T:        ast.Value_LIST,
+			Children: outPoints,
+		}, nil
+	}
+	switch value.GetT() {
+	case ast.Value_OUT_POINT:
+		return value, nil
+	case ast.Value_CELL:
+		// TODO: validate cell
+		return value.GetChildren()[4], nil
+	case ast.Value_CELL_DEP:
+		return value, nil
+	}
+	return nil, fmt.Errorf("Cannot convert %s to out point", value.GetT().String())
 }

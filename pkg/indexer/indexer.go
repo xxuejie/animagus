@@ -293,12 +293,12 @@ func (i *Indexer) revertBlock(blockNumber uint64) error {
 func (i *Indexer) processCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint, insert bool, commands *commandBuffer) error {
 	for _, valueContext := range i.values {
 		for queryIndex, query := range valueContext.Queries {
-			params, err := executeIndexingQuery(query, cell, cellData)
+			indexedValues, err := executeIndexingQuery(query, cell, cellData, outPoint)
 			if err != nil {
 				return err
 			}
-			if params != nil {
-				key, err := valueContext.IndexKey(queryIndex, params)
+			if indexedValues != nil {
+				key, err := valueContext.IndexKey(queryIndex, indexedValues)
 				if err != nil {
 					return err
 				}
@@ -436,12 +436,12 @@ func (e *indexingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) 
 	return nil, fmt.Errorf("QueryCell is not allowed in indexer!")
 }
 
-func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData rpctypes.Raw) ([]*ast.Value, error) {
+func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint) (map[int]*ast.Value, error) {
 	if len(query.GetChildren()) != 1 {
 		return nil, fmt.Errorf("Invalid number of values to query cell: %d", len(query.GetChildren()))
 	}
 	environment := &indexingEnvironment{
-		cell:          ast.ConvertCell(cell, cellData),
+		cell:          ast.ConvertCell(cell, cellData, outPoint),
 		indexedValues: make(map[int]*ast.Value),
 	}
 	value, err := executor.Execute(query.GetChildren()[0], environment)
@@ -454,12 +454,5 @@ func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData r
 	if !value.GetB() {
 		return nil, nil
 	}
-	sortedValues := make([]*ast.Value, len(environment.indexedValues))
-	for i, value := range environment.indexedValues {
-		if i >= len(sortedValues) {
-			return nil, fmt.Errorf("Values are not all used!")
-		}
-		sortedValues[i] = value
-	}
-	return sortedValues, nil
+	return environment.indexedValues, nil
 }

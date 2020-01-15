@@ -81,7 +81,11 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	if queryIndex == -1 {
 		return nil, fmt.Errorf("Invalid query cell argument!")
 	}
-	indexKey, err := e.valueContext.IndexKey(queryIndex, e.params.GetParams())
+	paramValues := make(map[int]*ast.Value)
+	for i, value := range e.params.GetParams() {
+		paramValues[i] = value
+	}
+	indexKey, err := e.valueContext.IndexKey(queryIndex, paramValues)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +124,8 @@ query {
     cell_data {
       content
     }
+    tx_hash
+    index
   }
 }
 `, assembleQueryString(outPoints)))
@@ -130,7 +136,7 @@ query {
 	}
 	results := make([]*ast.Value, len(response.GetCells))
 	for i, cell := range response.GetCells {
-		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content)
+		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content, *cell)
 	}
 	return results, nil
 }
