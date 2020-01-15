@@ -87,24 +87,74 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		if len(expr.GetChildren()) != 3 {
 			return nil, fmt.Errorf("Not enough arguments for transaction!")
 		}
-		inputs, err := convertCellToOutPoint(expr.GetChildren()[0], e)
+		inputCells, err := evaluateList(expr.GetChildren()[0], e)
 		if err != nil {
 			return nil, err
+		}
+		inputs := make([]*ast.Value, len(inputCells))
+		for i, inputCell := range inputCells {
+			if inputCell.GetT() != ast.Value_CELL ||
+				len(inputCell.GetChildren()) != 5 {
+				return nil, fmt.Errorf("Invalid input cell!")
+			}
+			inputs[i] = &ast.Value{
+				T: ast.Value_CELL_INPUT,
+				Children: []*ast.Value{
+					inputCell.GetChildren()[4],
+					&ast.Value{
+						T: ast.Value_UINT64,
+						Primitive: &ast.Value_U{
+							U: 0,
+						},
+					},
+				},
+			}
 		}
 		outputs, err := evaluateValue(expr.GetChildren()[1], e)
 		if err != nil {
 			return nil, err
 		}
-		dep_cells, err := convertCellToOutPoint(expr.GetChildren()[2], e)
+		depValues, err := evaluateList(expr.GetChildren()[2], e)
 		if err != nil {
 			return nil, err
+		}
+		deps := make([]*ast.Value, len(depValues))
+		for i, depValue := range depValues {
+			switch depValue.GetT() {
+			case ast.Value_CELL_DEP:
+				deps[i] = depValue
+			case ast.Value_CELL:
+				if len(depValue.GetChildren()) != 5 {
+					return nil, fmt.Errorf("Invalid dep cell!")
+				}
+				deps[i] = &ast.Value{
+					T: ast.Value_CELL_DEP,
+					Children: []*ast.Value{
+						depValue.GetChildren()[4],
+						&ast.Value{
+							T: ast.Value_UINT64,
+							Primitive: &ast.Value_U{
+								U: 1,
+							},
+						},
+					},
+				}
+			default:
+				return nil, fmt.Errorf("Invalid dep type: %s", depValue.GetT().String())
+			}
 		}
 		return &ast.Value{
 			T: ast.Value_TRANSACTION,
 			Children: []*ast.Value{
-				inputs,
+				&ast.Value{
+					T:        ast.Value_LIST,
+					Children: inputs,
+				},
 				outputs,
-				dep_cells,
+				&ast.Value{
+					T:        ast.Value_LIST,
+					Children: deps,
+				},
 			},
 		}, nil
 	case ast.Value_CELL:
@@ -519,35 +569,4 @@ func bigIntToValue(i *big.Int) *ast.Value {
 			Raw: a,
 		},
 	}
-}
-
-func convertCellToOutPoint(value *ast.Value, e Environment) (*ast.Value, error) {
-	if isListOp(value) {
-		list, err := evaluateList(value, e)
-		if err != nil {
-			return nil, err
-		}
-		outPoints := make([]*ast.Value, len(list))
-		for i, child := range list {
-			outPoint, err := convertCellToOutPoint(child, e)
-			if err != nil {
-				return nil, err
-			}
-			outPoints[i] = outPoint
-		}
-		return &ast.Value{
-			T:        ast.Value_LIST,
-			Children: outPoints,
-		}, nil
-	}
-	switch value.GetT() {
-	case ast.Value_OUT_POINT:
-		return value, nil
-	case ast.Value_CELL:
-		// TODO: validate cell
-		return value.GetChildren()[4], nil
-	case ast.Value_CELL_DEP:
-		return value, nil
-	}
-	return nil, fmt.Errorf("Cannot convert %s to out point", value.GetT().String())
 }

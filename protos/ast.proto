@@ -23,20 +23,21 @@ message Value {
     PARAM = 17;
     // Blockchain data structures
     OUT_POINT = 18;
-    CELL_DEP = 19;
-    SCRIPT = 20;
-    CELL = 21;
-    TRANSACTION = 22;
+    CELL_INPUT = 19;
+    CELL_DEP = 20;
+    SCRIPT = 21;
+    CELL = 22;
+    TRANSACTION = 23;
 
     // Compound fields
-    APPLY = 23;
-    REDUCE = 24;
+    APPLY = 24;
+    REDUCE = 25;
 
     // List fields
-    LIST = 25;
-    QUERY_CELLS = 26;
-    MAP = 27;
-    FILTER = 28;
+    LIST = 26;
+    QUERY_CELLS = 27;
+    MAP = 28;
+    FILTER = 29;
 
     // Cell get operations
     GET_CAPACITY = 48;
