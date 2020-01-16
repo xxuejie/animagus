@@ -44,7 +44,6 @@ def main
     ]
   )
   response = stub.call(request)
-  p response
   puts JSON.pretty_generate(JSON.parse(response.raw))
 end
 

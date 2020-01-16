@@ -159,6 +159,62 @@ func assembleUdtType(paramIndex uint64) *ast.Value {
 	}
 }
 
+func adjustFee(tx *ast.Value) *ast.Value {
+	length := &ast.Value{
+		T: ast.Value_LEN,
+		Children: []*ast.Value{
+			&ast.Value{
+				T:        ast.Value_SERIALIZE_TO_CORE,
+				Children: []*ast.Value{tx},
+			},
+		},
+	}
+	fee := &ast.Value{
+		T: ast.Value_MULTIPLY,
+		Children: []*ast.Value{
+			// Adding extra bytes here to set aside for signatures
+			&ast.Value{
+				T: ast.Value_PLUS,
+				Children: []*ast.Value{
+					length,
+					uint_value(100),
+				},
+			},
+			uint_value(1),
+		},
+	}
+	changeCell := tx.GetChildren()[1].GetChildren()[1]
+	adjustedChangeCell := &ast.Value{
+		T: ast.Value_CELL,
+		Children: []*ast.Value{
+			&ast.Value{
+				T: ast.Value_MINUS,
+				Children: []*ast.Value{
+					changeCell.GetChildren()[0],
+					fee,
+				},
+			},
+			changeCell.GetChildren()[1],
+			changeCell.GetChildren()[2],
+			changeCell.GetChildren()[3],
+		},
+	}
+	return &ast.Value{
+		T: ast.Value_TRANSACTION,
+		Children: []*ast.Value{
+			tx.GetChildren()[0],
+			&ast.Value{
+				T: ast.Value_LIST,
+				Children: []*ast.Value{
+					tx.GetChildren()[1].GetChildren()[0],
+					adjustedChangeCell,
+				},
+			},
+			tx.GetChildren()[2],
+		},
+	}
+}
+
 func main() {
 	typeCells := &ast.Value{
 		T: ast.Value_QUERY_CELLS,
@@ -329,9 +385,10 @@ func main() {
 			},
 		},
 	}
+	transaction = adjustFee(transaction)
 
 	serializedTransaction := &ast.Value{
-		T:        ast.Value_SERIALIZE,
+		T:        ast.Value_SERIALIZE_TO_JSON,
 		Children: []*ast.Value{transaction},
 	}
 

@@ -54,22 +54,24 @@ message Value {
 
     // Operations
     HASH = 73;
-    SERIALIZE = 74;
+    SERIALIZE_TO_CORE = 74;
+    SERIALIZE_TO_JSON = 75;
 
-    NOT = 75;
-    AND = 76;
-    OR = 77;
-    XOR = 78;
+    NOT = 76;
+    AND = 77;
+    OR = 78;
+    XOR = 79;
 
-    EQUAL = 79;
-    LESS = 80;
+    EQUAL = 80;
+    LESS = 81;
 
-    LEN = 81;
-    SLICE = 82;
-    INDEX = 83;
+    LEN = 82;
+    SLICE = 83;
+    INDEX = 84;
 
-    PLUS = 84;
-    MINUS = 85;
+    PLUS = 85;
+    MINUS = 86;
+    MULTIPLY = 87;
   }
   Type t = 1;
   oneof primitive {

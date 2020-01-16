@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -270,11 +271,16 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, fmt.Errorf("Invalid number of operands to HASH")
 		}
 		return evaluateHash(operands[0])
-	case ast.Value_SERIALIZE:
+	case ast.Value_SERIALIZE_TO_CORE:
 		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to HASH")
+			return nil, fmt.Errorf("Invalid number of operands to SERIALIZE_TO_CORE")
 		}
-		return evaluateSerialize(operands[0])
+		return evaluateSerialize(operands[0], false)
+	case ast.Value_SERIALIZE_TO_JSON:
+		if len(operands) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to SERIALIZE_TO_JSON")
+		}
+		return evaluateSerialize(operands[0], true)
 	case ast.Value_EQUAL:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
@@ -343,6 +349,28 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, err
 		}
 		return bigIntToValue(new(big.Int).Sub(a, b)), nil
+	case ast.Value_MULTIPLY:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to MINUS")
+		}
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			return &ast.Value{
+				T: ast.Value_UINT64,
+				Primitive: &ast.Value_U{
+					U: operands[0].GetU() * operands[1].GetU(),
+				},
+			}, nil
+		}
+		a, err := valueToBigInt(operands[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := valueToBigInt(operands[1])
+		if err != nil {
+			return nil, err
+		}
+		return bigIntToValue(new(big.Int).Mul(a, b)), nil
 	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")
@@ -405,6 +433,19 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, fmt.Errorf("Index out of range!")
 		}
 		return list[i], nil
+	case ast.Value_LEN:
+		if len(operands) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to LEN")
+		}
+		if operands[0].GetT() != ast.Value_BYTES {
+			return nil, fmt.Errorf("Invalid operand type to LEN")
+		}
+		return &ast.Value{
+			T: ast.Value_UINT64,
+			Primitive: &ast.Value_U{
+				U: uint64(len(operands[0].GetRaw())),
+			},
+		}, nil
 	}
 	return nil, fmt.Errorf("Invalid op: %s", op.String())
 }
@@ -509,16 +550,26 @@ func evaluateHash(value *ast.Value) (*ast.Value, error) {
 	return nil, fmt.Errorf("Invalid value type: %s, cannot calculate hash", value.GetT().String())
 }
 
-func evaluateSerialize(value *ast.Value) (*ast.Value, error) {
+func evaluateSerialize(value *ast.Value, toJson bool) (*ast.Value, error) {
 	switch value.GetT() {
 	case ast.Value_TRANSACTION:
 		tx, err := ast.RestoreTransaction(value, true)
 		if err != nil {
 			return nil, err
 		}
-		data, err := json.Marshal(tx)
-		if err != nil {
-			return nil, err
+		var data []byte
+		if toJson {
+			data, err = json.Marshal(tx)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			var buffer bytes.Buffer
+			err = tx.SerializeToCore(&buffer)
+			if err != nil {
+				return nil, err
+			}
+			data = buffer.Bytes()
 		}
 		return &ast.Value{
 			T: ast.Value_BYTES,
