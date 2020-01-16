@@ -103,7 +103,7 @@ func main() {
 		T: ast.Value_REDUCE,
 		Children: []*ast.Value{
 			&ast.Value{
-				T: ast.Value_PLUS,
+				T: ast.Value_ADD,
 				Children: []*ast.Value{
 					arg(0),
 					arg(1),

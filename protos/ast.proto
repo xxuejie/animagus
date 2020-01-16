@@ -69,8 +69,8 @@ message Value {
     SLICE = 83;
     INDEX = 84;
 
-    PLUS = 85;
-    MINUS = 86;
+    ADD = 85;
+    SUBTRACT = 86;
     MULTIPLY = 87;
   }
   Type t = 1;

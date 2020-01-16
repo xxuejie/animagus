@@ -174,7 +174,7 @@ func adjustFee(tx *ast.Value) *ast.Value {
 		Children: []*ast.Value{
 			// Adding extra bytes here to set aside for signatures
 			&ast.Value{
-				T: ast.Value_PLUS,
+				T: ast.Value_ADD,
 				Children: []*ast.Value{
 					length,
 					uint_value(100),
@@ -188,7 +188,7 @@ func adjustFee(tx *ast.Value) *ast.Value {
 		T: ast.Value_CELL,
 		Children: []*ast.Value{
 			&ast.Value{
-				T: ast.Value_MINUS,
+				T: ast.Value_SUBTRACT,
 				Children: []*ast.Value{
 					changeCell.GetChildren()[0],
 					fee,
@@ -261,7 +261,7 @@ func main() {
 		T: ast.Value_REDUCE,
 		Children: []*ast.Value{
 			&ast.Value{
-				T: ast.Value_PLUS,
+				T: ast.Value_ADD,
 				Children: []*ast.Value{
 					arg(0),
 					arg(1),
@@ -279,7 +279,7 @@ func main() {
 		T: ast.Value_REDUCE,
 		Children: []*ast.Value{
 			&ast.Value{
-				T: ast.Value_PLUS,
+				T: ast.Value_ADD,
 				Children: []*ast.Value{
 					arg(0),
 					arg(1),
@@ -306,7 +306,7 @@ func main() {
 			uint_value(0),
 			uint_value(16),
 			&ast.Value{
-				T: ast.Value_PLUS,
+				T: ast.Value_ADD,
 				Children: []*ast.Value{
 					bytes_value([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
 					param(3),
@@ -321,7 +321,7 @@ func main() {
 			uint_value(0),
 			uint_value(16),
 			&ast.Value{
-				T: ast.Value_MINUS,
+				T: ast.Value_SUBTRACT,
 				Children: []*ast.Value{
 					balance,
 					transferTokens,
@@ -331,7 +331,7 @@ func main() {
 	}
 
 	changeCapacities := &ast.Value{
-		T: ast.Value_MINUS,
+		T: ast.Value_SUBTRACT,
 		Children: []*ast.Value{
 			totalCapacities,
 			uint_value(142 * 100000000),

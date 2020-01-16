@@ -305,9 +305,9 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 				B: result,
 			},
 		}, nil
-	case ast.Value_PLUS:
+	case ast.Value_ADD:
 		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to PLUS")
+			return nil, fmt.Errorf("Invalid number of operands to ADD")
 		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
@@ -327,9 +327,9 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, err
 		}
 		return bigIntToValue(new(big.Int).Add(a, b)), nil
-	case ast.Value_MINUS:
+	case ast.Value_SUBTRACT:
 		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to MINUS")
+			return nil, fmt.Errorf("Invalid number of operands to SUBTRACT")
 		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
@@ -351,7 +351,7 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		return bigIntToValue(new(big.Int).Sub(a, b)), nil
 	case ast.Value_MULTIPLY:
 		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to MINUS")
+			return nil, fmt.Errorf("Invalid number of operands to MULTIPLY")
 		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
