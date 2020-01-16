@@ -24,4 +24,7 @@ install-tools: download
 ci-fmt: fmt
 	git diff --exit-code
 
-.PHONY: fmt proto proto-ruby test download install-tools ci-fmt
+ci-proto: proto
+	git diff --exit-code
+
+.PHONY: fmt proto proto-ruby test download install-tools ci-fmt ci-proto
