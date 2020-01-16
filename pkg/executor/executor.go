@@ -27,7 +27,7 @@ func isPrimitive(expr *ast.Value) bool {
 }
 
 func isOp(expr *ast.Value) bool {
-	return expr.GetT() >= ast.Value_HASH
+	return expr.GetT() >= ast.Value_HASH && expr.GetT() < ast.Value_COND
 }
 
 func isGetOp(expr *ast.Value) bool {
@@ -85,6 +85,23 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			return nil, fmt.Errorf("Cannot find param index %d!", index)
 		}
 		return param, nil
+	case ast.Value_COND:
+		children := expr.GetChildren()
+		if len(children) != 3 {
+			return nil, fmt.Errorf("Not enough arguments for cond!")
+		}
+		predicate, err := evaluateValue(children[0], e)
+		if err != nil {
+			return nil, err
+		}
+		if predicate.GetT() != ast.Value_BOOL {
+			return nil, fmt.Errorf("Invalid predicate to cond!")
+		}
+		if predicate.GetB() {
+			return evaluateValue(children[1], e)
+		} else {
+			return evaluateValue(children[2], e)
+		}
 	case ast.Value_TRANSACTION:
 		if len(expr.GetChildren()) != 3 {
 			return nil, fmt.Errorf("Not enough arguments for transaction!")
@@ -371,6 +388,62 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, err
 		}
 		return bigIntToValue(new(big.Int).Mul(a, b)), nil
+	case ast.Value_DIVIDE:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to DIVIDE")
+		}
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			if operands[1].GetU() == 0 {
+				return nil, fmt.Errorf("Divide by zero!")
+			}
+			return &ast.Value{
+				T: ast.Value_UINT64,
+				Primitive: &ast.Value_U{
+					U: operands[0].GetU() / operands[1].GetU(),
+				},
+			}, nil
+		}
+		a, err := valueToBigInt(operands[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := valueToBigInt(operands[1])
+		if err != nil {
+			return nil, err
+		}
+		if b.Cmp(new(big.Int)) == 0 {
+			return nil, fmt.Errorf("Divide by zero!")
+		}
+		return bigIntToValue(new(big.Int).Div(a, b)), nil
+	case ast.Value_MOD:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to MOD")
+		}
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			if operands[1].GetU() == 0 {
+				return nil, fmt.Errorf("Divide by zero!")
+			}
+			return &ast.Value{
+				T: ast.Value_UINT64,
+				Primitive: &ast.Value_U{
+					U: operands[0].GetU() % operands[1].GetU(),
+				},
+			}, nil
+		}
+		a, err := valueToBigInt(operands[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := valueToBigInt(operands[1])
+		if err != nil {
+			return nil, err
+		}
+		if b.Cmp(new(big.Int)) == 0 {
+			return nil, fmt.Errorf("Divide by zero!")
+		}
+		return bigIntToValue(new(big.Int).Mod(a, b)), nil
 	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")

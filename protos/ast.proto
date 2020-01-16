@@ -72,6 +72,11 @@ message Value {
     ADD = 85;
     SUBTRACT = 86;
     MULTIPLY = 87;
+    DIVIDE = 88;
+    MOD = 89;
+
+    // Special operations
+    COND = 120;
   }
   Type t = 1;
   oneof primitive {
