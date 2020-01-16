@@ -60,7 +60,6 @@ message Value {
     NOT = 76;
     AND = 77;
     OR = 78;
-    XOR = 79;
 
     EQUAL = 80;
     LESS = 81;

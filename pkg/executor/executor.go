@@ -322,6 +322,31 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 				B: result,
 			},
 		}, nil
+	case ast.Value_LESS:
+		if len(operands) != 2 {
+			return nil, fmt.Errorf("Invalid number of operands to LESS")
+		}
+		var result bool
+		if operands[0].GetT() == ast.Value_UINT64 &&
+			operands[1].GetT() == ast.Value_UINT64 {
+			result = operands[0].GetU() < operands[1].GetU()
+		} else {
+			a, err := valueToBigInt(operands[0])
+			if err != nil {
+				return nil, err
+			}
+			b, err := valueToBigInt(operands[1])
+			if err != nil {
+				return nil, err
+			}
+			result = a.Cmp(b) == -1
+		}
+		return &ast.Value{
+			T: ast.Value_BOOL,
+			Primitive: &ast.Value_B{
+				B: result,
+			},
+		}, nil
 	case ast.Value_ADD:
 		if len(operands) != 2 {
 			return nil, fmt.Errorf("Invalid number of operands to ADD")
@@ -444,6 +469,19 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			return nil, fmt.Errorf("Divide by zero!")
 		}
 		return bigIntToValue(new(big.Int).Mod(a, b)), nil
+	case ast.Value_NOT:
+		if len(operands) != 1 {
+			return nil, fmt.Errorf("Invalid number of operands to NOT")
+		}
+		if operands[0].GetT() != ast.Value_BOOL {
+			return nil, fmt.Errorf("Invalid operand type %s to NOT!", operands[0].GetT().String())
+		}
+		return &ast.Value{
+			T: ast.Value_BOOL,
+			Primitive: &ast.Value_B{
+				B: !operands[0].GetB(),
+			},
+		}, nil
 	case ast.Value_AND:
 		if len(operands) == 0 {
 			return nil, fmt.Errorf("Invalid number of operands to AND")
@@ -455,6 +493,26 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			}
 			if !operand.GetB() {
 				result = false
+				break
+			}
+		}
+		return &ast.Value{
+			T: ast.Value_BOOL,
+			Primitive: &ast.Value_B{
+				B: result,
+			},
+		}, nil
+	case ast.Value_OR:
+		if len(operands) == 0 {
+			return nil, fmt.Errorf("Invalid number of operands to OR")
+		}
+		result := false
+		for _, operand := range operands {
+			if operand.GetT() != ast.Value_BOOL {
+				return nil, fmt.Errorf("Invalid operand type %s to OR!", operand.GetT().String())
+			}
+			if operand.GetB() {
+				result = true
 				break
 			}
 		}
@@ -552,6 +610,11 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 				Raw: h,
 			},
 		}, nil
+	case ast.Value_GET_OUT_POINT:
+		if len(value.GetChildren()) != 5 {
+			return nil, fmt.Errorf("Provided cell does not have out point!")
+		}
+		return value.GetChildren()[4], nil
 	case ast.Value_GET_CODE_HASH:
 		return value.GetChildren()[0], nil
 	case ast.Value_GET_HASH_TYPE:
@@ -583,6 +646,32 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 			})
 			if err != nil {
 				return nil, err
+			}
+		}
+		return results, nil
+	case ast.Value_FILTER:
+		if len(list.GetChildren()) != 2 {
+			return nil, fmt.Errorf("Invalid number of lists for map!")
+		}
+		f := list.GetChildren()[0]
+		list, err := evaluateList(list.GetChildren()[1], e)
+		if err != nil {
+			return nil, err
+		}
+		results := make([]*ast.Value, 0)
+		for _, value := range list {
+			b, err := evaluateValue(f, &prependEnvironment{
+				e:    e,
+				args: []*ast.Value{value},
+			})
+			if err != nil {
+				return nil, err
+			}
+			if b.GetT() != ast.Value_BOOL {
+				return nil, fmt.Errorf("Invalid filter result type: %s", b.GetT().String())
+			}
+			if b.GetB() {
+				results = append(results, value)
 			}
 		}
 		return results, nil
