@@ -91,6 +91,12 @@ message Call {
   Value result = 3;
 }
 
+message Stream {
+  string name = 1;
+  Value filter = 2;
+}
+
 message Root {
   repeated Call calls = 1;
+  repeated Stream streams = 2;
 }

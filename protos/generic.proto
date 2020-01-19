@@ -13,4 +13,5 @@ message GenericParams {
 
 service GenericService {
   rpc Call(GenericParams) returns (ast.Value) {}
+  rpc Stream(GenericParams) returns (stream ast.Value) {}
 }

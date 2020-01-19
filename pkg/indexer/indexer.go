@@ -24,6 +24,7 @@ const Version string = "0.0.1"
 type Indexer struct {
 	hash          []byte
 	values        []ValueContext
+	streams       []*ast.Stream
 	redisPool     *redis.Pool
 	graphqlClient *graphql.Client
 }
@@ -70,6 +71,7 @@ query {
 		hash:          hash,
 		redisPool:     redisPool,
 		graphqlClient: client,
+		streams:       root.GetStreams(),
 	}, nil
 }
 
@@ -291,9 +293,10 @@ func (i *Indexer) revertBlock(blockNumber uint64) error {
 }
 
 func (i *Indexer) processCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint, insert bool, commands *commandBuffer) error {
+	astCell := ast.ConvertCell(cell, cellData, outPoint)
 	for _, valueContext := range i.values {
 		for queryIndex, query := range valueContext.Queries {
-			indexedValues, err := executeIndexingQuery(query, cell, cellData, outPoint)
+			indexedValues, err := executeIndexingQuery(query, astCell)
 			if err != nil {
 				return err
 			}
@@ -310,6 +313,23 @@ func (i *Indexer) processCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, o
 			}
 		}
 	}
+	for _, stream := range i.streams {
+		value, err := executeStreamingFilter(stream.GetFilter(), astCell, insert, true)
+		if err != nil {
+			return err
+		}
+		if value != nil {
+			commands.streamValue(stream.GetName(), value)
+		}
+		// Prepare revert value
+		value, err = executeStreamingFilter(stream.GetFilter(), astCell, !insert, false)
+		if err != nil {
+			return err
+		}
+		if value != nil {
+			commands.revertStreamValue(stream.GetName(), value)
+		}
+	}
 	return nil
 }
 
@@ -321,8 +341,10 @@ type command struct {
 type commandBuffer struct {
 	commands       []command
 	revertCommands []command
-	revertKey      string
-	err            error
+	// Those are kept separated since they will be reversed.
+	streamRevertCommands []command
+	revertKey            string
+	err                  error
 }
 
 func (c *commandBuffer) do(commandName string, args ...interface{}) {
@@ -340,6 +362,16 @@ func (c *commandBuffer) revertDo(commandName string, args ...interface{}) {
 		return
 	}
 	c.revertCommands = append(c.revertCommands, command{
+		Name: commandName,
+		Args: args,
+	})
+}
+
+func (c *commandBuffer) streamRevertDo(commandName string, args ...interface{}) {
+	if c.err != nil {
+		return
+	}
+	c.streamRevertCommands = append(c.streamRevertCommands, command{
 		Name: commandName,
 		Args: args,
 	})
@@ -372,6 +404,22 @@ func (c *commandBuffer) remove(key string, outPoint rpctypes.OutPoint) {
 	c.revertDo("SADD", key, buffer.Bytes())
 }
 
+func (c *commandBuffer) streamValue(name string, value []byte) {
+	if c.err != nil {
+		return
+	}
+	key := fmt.Sprintf("STREAM:%s", name)
+	c.do("PUBLISH", key, value)
+}
+
+func (c *commandBuffer) revertStreamValue(name string, value []byte) {
+	if c.err != nil {
+		return
+	}
+	key := fmt.Sprintf("STREAM:%s", name)
+	c.streamRevertDo("PUBLISH", key, value)
+}
+
 func (c *commandBuffer) execute(conn redis.Conn) error {
 	if c.err != nil {
 		return c.err
@@ -383,6 +431,11 @@ func (c *commandBuffer) execute(conn redis.Conn) error {
 	var buf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buf)
 	encoder := json.NewEncoder(gzipWriter)
+	revertCommands := make([]command, len(c.revertCommands)+len(c.streamRevertCommands))
+	copy(revertCommands, c.revertCommands)
+	for i, c := range c.streamRevertCommands {
+		revertCommands[len(revertCommands)-1-i] = c
+	}
 	err := encoder.Encode(c.revertCommands)
 	if err != nil {
 		return err
@@ -436,12 +489,12 @@ func (e *indexingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) 
 	return nil, fmt.Errorf("QueryCell is not allowed in indexer!")
 }
 
-func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint) (map[int]*ast.Value, error) {
+func executeIndexingQuery(query *ast.Value, cell *ast.Value) (map[int]*ast.Value, error) {
 	if len(query.GetChildren()) != 1 {
 		return nil, fmt.Errorf("Invalid number of values to query cell: %d", len(query.GetChildren()))
 	}
 	environment := &indexingEnvironment{
-		cell:          ast.ConvertCell(cell, cellData, outPoint),
+		cell:          cell,
 		indexedValues: make(map[int]*ast.Value),
 	}
 	value, err := executor.Execute(query.GetChildren()[0], environment)
@@ -455,4 +508,67 @@ func executeIndexingQuery(query *ast.Value, cell rpctypes.CellOutput, cellData r
 		return nil, nil
 	}
 	return environment.indexedValues, nil
+}
+
+type streamExecutingEnvironment struct {
+	args []*ast.Value
+}
+
+func (e streamExecutingEnvironment) Arg(i int) *ast.Value {
+	if i < 0 || i >= len(e.args) {
+		return nil
+	}
+	return e.args[i]
+}
+
+func (e streamExecutingEnvironment) Param(i int) *ast.Value {
+	return nil
+}
+
+func (e streamExecutingEnvironment) IndexParam(i int, value *ast.Value) error {
+	return fmt.Errorf("Indexing param is not allowed!")
+}
+
+func (e streamExecutingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
+	return nil, fmt.Errorf("Querying cell is not allowed!")
+}
+
+func executeStreamingFilter(filter *ast.Value, cell *ast.Value, insert bool, index bool) ([]byte, error) {
+	var t string
+	if insert {
+		t = "insert"
+	} else {
+		t = "remove"
+	}
+	var i string
+	if index {
+		i = "index"
+	} else {
+		i = "revert"
+	}
+	e := streamExecutingEnvironment{
+		args: []*ast.Value{
+			cell,
+			&ast.Value{
+				T: ast.Value_BYTES,
+				Primitive: &ast.Value_Raw{
+					Raw: []byte(t),
+				},
+			},
+			&ast.Value{
+				T: ast.Value_BYTES,
+				Primitive: &ast.Value_Raw{
+					Raw: []byte(i),
+				},
+			},
+		},
+	}
+	value, err := executor.Execute(filter, e)
+	if err != nil {
+		return nil, err
+	}
+	if value.GetT() == ast.Value_NIL {
+		return nil, nil
+	}
+	return proto.Marshal(value)
 }

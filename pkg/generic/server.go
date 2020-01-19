@@ -3,6 +3,7 @@ package generic
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -22,6 +23,7 @@ type callInfo struct {
 
 type Server struct {
 	calls         map[string]callInfo
+	streams       []*ast.Stream
 	redisPool     *redis.Pool
 	graphqlClient *graphql.Client
 }
@@ -46,6 +48,7 @@ func NewServer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Se
 	client := graphql.NewClient(graphqlUrl)
 	return &Server{
 		calls:         calls,
+		streams:       root.GetStreams(),
 		redisPool:     redisPool,
 		graphqlClient: client,
 	}, nil
@@ -160,4 +163,49 @@ func (s *Server) Call(ctx context.Context, p *GenericParams) (*ast.Value, error)
 		s:            s,
 	}
 	return executor.Execute(callInfo.expr, environment)
+}
+
+func (s *Server) Stream(p *GenericParams, streamServer GenericService_StreamServer) error {
+	var selectedStream *ast.Stream
+	for _, aStream := range s.streams {
+		if p.GetName() == aStream.GetName() {
+			selectedStream = aStream
+			break
+		}
+	}
+	if selectedStream == nil {
+		return fmt.Errorf("Calling non-exist stream: %s", p.GetName())
+	}
+
+	psc := redis.PubSubConn{Conn: s.redisPool.Get()}
+	defer psc.Close()
+
+	key := fmt.Sprintf("STREAM:%s", selectedStream.GetName())
+	err := psc.Subscribe(key)
+	if err != nil {
+		return err
+	}
+	for {
+		switch v := psc.Receive().(type) {
+		case redis.Message:
+			if v.Channel == key {
+				value := &ast.Value{}
+				err = proto.Unmarshal(v.Data, value)
+				if err != nil {
+					break
+				}
+				err = streamServer.Send(value)
+				if err == io.EOF {
+					return psc.Unsubscribe()
+				}
+				if err != nil {
+					break
+				}
+			}
+		case error:
+			return v
+		}
+	}
+	psc.Unsubscribe()
+	return err
 }
