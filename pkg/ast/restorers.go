@@ -56,7 +56,7 @@ func RestoreCell(value *Value, validate bool) (cell rpctypes.CellOutput, cellDat
 	}
 	cellData = make([]byte, len(value.GetChildren()[3].GetRaw()))
 	copy(cellData, value.GetChildren()[3].GetRaw())
-	if len(value.GetChildren()) == 5 {
+	if len(value.GetChildren()) > 4 {
 		var o rpctypes.OutPoint
 		o, err = RestoreOutPoint(value.GetChildren()[4], false)
 		if err != nil {

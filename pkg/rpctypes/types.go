@@ -6,6 +6,7 @@ type OutPoint struct {
 
 	GraphqlCell     *CellOutput   `json:"cell,omitempty"`
 	GraphqlCellData *GraphqlBytes `json:"cell_data,omitempty"`
+	GraphqlHeader   *Header       `json:"header,omitempty"`
 }
 
 type CellInput struct {

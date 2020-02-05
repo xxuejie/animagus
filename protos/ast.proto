@@ -7,10 +7,11 @@ option go_package = "github.com/xxuejie/animagus/pkg/ast";
 message Value {
   enum Type {
     // Primitive fields
-    UINT64 = 0;
-    NIL = 1;
+    NIL = 0;
+    UINT64 = 1;
     BOOL = 2;
     BYTES = 3;
+    ERROR = 4;
 
     // In animagus, we distinguish args and params in the following way:
     // * If a Value struct contains an arg, it will be interpretted as a
@@ -28,16 +29,17 @@ message Value {
     SCRIPT = 21;
     CELL = 22;
     TRANSACTION = 23;
+    HEADER = 24;
 
     // Compound fields
-    APPLY = 24;
-    REDUCE = 25;
+    APPLY = 25;
+    REDUCE = 26;
 
     // List fields
-    LIST = 26;
-    QUERY_CELLS = 27;
-    MAP = 28;
-    FILTER = 29;
+    LIST = 27;
+    QUERY_CELLS = 28;
+    MAP = 29;
+    FILTER = 30;
 
     // Cell get operations
     GET_CAPACITY = 48;
@@ -51,6 +53,27 @@ message Value {
     GET_CODE_HASH = 54;
     GET_HASH_TYPE = 55;
     GET_ARGS = 56;
+
+    // Transaction get operations
+    GET_CELL_DEPS = 57;
+    GET_HEADER_DEPS = 58;
+    GET_INPUTS = 59;
+    GET_OUTPUTS = 60;
+    GET_WITNESSES = 61;
+
+    // Header get operations
+    GET_COMPACT_TARGET = 62;
+    GET_TIMESTAMP = 63;
+    GET_NUMBER = 64;
+    GET_EPOCH = 65;
+    GET_PARENT_HASH = 66;
+    GET_TRANSACTIONS_ROOT = 67;
+    GET_PROPOSALS_HASH = 68;
+    GET_UNCLES_HASH = 69;
+    GET_DAO = 70;
+    GET_NONCE = 71;
+
+    GET_HEADER = 72;
 
     // Operations
     HASH = 73;

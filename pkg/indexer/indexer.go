@@ -293,7 +293,14 @@ func (i *Indexer) revertBlock(blockNumber uint64) error {
 }
 
 func (i *Indexer) processCell(cell rpctypes.CellOutput, cellData rpctypes.Raw, outPoint rpctypes.OutPoint, insert bool, commands *commandBuffer) error {
-	astCell := ast.ConvertCell(cell, cellData, outPoint)
+	// TODO: To maintain reasonable cell set in CKB, it might not be possible to grab
+	// meta-data of very old spent cells. Hence for now, we are excluding all cell
+	// headers in indexer mode, and only include headers when executing an AST
+	// (since executor only uses live cells). A different solution might be that
+	// animagus can do its own indexing to cache all header info, but that will
+	// be a quite big change so we will leave it till a future time when it is
+	// really needed.
+	astCell := ast.ConvertCell(cell, cellData, outPoint, nil)
 	for _, valueContext := range i.values {
 		for queryIndex, query := range valueContext.Queries {
 			indexedValues, err := executeIndexingQuery(query, astCell)

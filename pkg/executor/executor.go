@@ -611,16 +611,41 @@ func evaluateOpGet(field ast.Value_Type, value *ast.Value, e Environment) (*ast.
 			},
 		}, nil
 	case ast.Value_GET_OUT_POINT:
-		if len(value.GetChildren()) != 5 {
+		if len(value.GetChildren()) < 5 {
 			return nil, fmt.Errorf("Provided cell does not have out point!")
 		}
 		return value.GetChildren()[4], nil
+	case ast.Value_GET_HEADER:
+		if len(value.GetChildren()) < 6 {
+			return nil, fmt.Errorf("Provided cell does not have header!")
+		}
+		return value.GetChildren()[5], nil
 	case ast.Value_GET_CODE_HASH:
 		return value.GetChildren()[0], nil
 	case ast.Value_GET_HASH_TYPE:
 		return value.GetChildren()[1], nil
 	case ast.Value_GET_ARGS:
 		return value.GetChildren()[2], nil
+	case ast.Value_GET_COMPACT_TARGET:
+		return value.GetChildren()[0], nil
+	case ast.Value_GET_TIMESTAMP:
+		return value.GetChildren()[1], nil
+	case ast.Value_GET_NUMBER:
+		return value.GetChildren()[2], nil
+	case ast.Value_GET_EPOCH:
+		return value.GetChildren()[3], nil
+	case ast.Value_GET_PARENT_HASH:
+		return value.GetChildren()[4], nil
+	case ast.Value_GET_TRANSACTIONS_ROOT:
+		return value.GetChildren()[5], nil
+	case ast.Value_GET_PROPOSALS_HASH:
+		return value.GetChildren()[6], nil
+	case ast.Value_GET_UNCLES_HASH:
+		return value.GetChildren()[7], nil
+	case ast.Value_GET_DAO:
+		return value.GetChildren()[8], nil
+	case ast.Value_GET_NONCE:
+		return value.GetChildren()[9], nil
 	}
 	return nil, fmt.Errorf("Invalid get field: %s", field.String())
 }

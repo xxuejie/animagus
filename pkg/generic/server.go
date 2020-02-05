@@ -129,6 +129,18 @@ query {
     }
     tx_hash
     index
+    header {
+      compact_target
+      parent_hash
+      timestamp
+      number
+      epoch
+      transactions_root
+      proposals_hash
+      uncles_hash
+      dao
+      nonce
+    }
   }
 }
 `, assembleQueryString(outPoints)))
@@ -139,7 +151,7 @@ query {
 	}
 	results := make([]*ast.Value, len(response.GetCells))
 	for i, cell := range response.GetCells {
-		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content, *cell)
+		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content, *cell, cell.GraphqlHeader)
 	}
 	return results, nil
 }
