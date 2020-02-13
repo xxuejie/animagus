@@ -114,7 +114,7 @@ func (sc *syscallContext) generate() (int, variableType, error) {
 			i, i, sc.start, idx, sc.source)
 	} else {
 		sc.c.printfln("int ret = %s(v%d, &v%d_length, %d, v%d, %s, %s);",
-			i, i, sc.start, idx, sc.source, sc.field)
+			sc.method, i, i, sc.start, idx, sc.source, sc.field)
 	}
 	sc.c.printfln("if (ret == CKB_INDEX_OUT_OF_BOUND) { break; }")
 	sc.c.printfln("if (ret != 0) { return %d; }", sc.c.newErrorCode())
