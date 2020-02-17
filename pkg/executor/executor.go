@@ -18,6 +18,9 @@ type Environment interface {
 	QueryCell(query *ast.Value) ([]*ast.Value, error)
 }
 
+// One must make sure expr passes Verify function in verifier package before
+// calling Execute here. For simplicity, we do not perform checks already
+// exist in verifier package
 func Execute(expr *ast.Value, e Environment) (*ast.Value, error) {
 	return evaluateValue(expr, e)
 }
@@ -61,9 +64,6 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		return evaluateOp(expr.GetT(), children, e)
 	}
 	if isGetOp(expr) {
-		if len(expr.GetChildren()) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to GET")
-		}
 		operand, err := evaluateValue(expr.GetChildren()[0], e)
 		if err != nil {
 			return nil, err
@@ -103,9 +103,6 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			return evaluateValue(children[2], e)
 		}
 	case ast.Value_TRANSACTION:
-		if len(expr.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Not enough arguments for transaction!")
-		}
 		inputCells, err := evaluateList(expr.GetChildren()[0], e)
 		if err != nil {
 			return nil, err
@@ -113,7 +110,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		inputs := make([]*ast.Value, len(inputCells))
 		for i, inputCell := range inputCells {
 			if inputCell.GetT() != ast.Value_CELL ||
-				len(inputCell.GetChildren()) != 5 {
+				len(inputCell.GetChildren()) < 5 {
 				return nil, fmt.Errorf("Invalid input cell!")
 			}
 			inputs[i] = &ast.Value{
@@ -143,7 +140,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			case ast.Value_CELL_DEP:
 				deps[i] = depValue
 			case ast.Value_CELL:
-				if len(depValue.GetChildren()) != 5 {
+				if len(depValue.GetChildren()) < 5 {
 					return nil, fmt.Errorf("Invalid dep cell!")
 				}
 				deps[i] = &ast.Value{
@@ -162,7 +159,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 				return nil, fmt.Errorf("Invalid dep type: %s", depValue.GetT().String())
 			}
 		}
-		return &ast.Value{
+		tx := &ast.Value{
 			T: ast.Value_TRANSACTION,
 			Children: []*ast.Value{
 				&ast.Value{
@@ -175,7 +172,12 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 					Children: deps,
 				},
 			},
-		}, nil
+		}
+		err = ast.IsValidTransaction(tx)
+		if err != nil {
+			return nil, err
+		}
+		return tx, nil
 	case ast.Value_CELL:
 		value, err := evaluateChildren(expr, e)
 		if err != nil {
@@ -217,9 +219,6 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		}
 		return value, nil
 	case ast.Value_APPLY:
-		if len(expr.GetChildren()) < 1 {
-			return nil, fmt.Errorf("Not enough arguments for apply!")
-		}
 		args, err := evaluateAstValues(expr.GetChildren()[1:], e)
 		if err != nil {
 			return nil, err
@@ -229,9 +228,6 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			args: args,
 		})
 	case ast.Value_REDUCE:
-		if len(expr.GetChildren()) != 3 {
-			return nil, fmt.Errorf("Invalid number of arguments for reduce!")
-		}
 		f := expr.GetChildren()[0]
 		currentValue, err := evaluateValue(expr.GetChildren()[1], e)
 		if err != nil {
@@ -284,24 +280,12 @@ func evaluateAstValues(values []*ast.Value, e Environment) ([]*ast.Value, error)
 func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.Value, error) {
 	switch op {
 	case ast.Value_HASH:
-		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to HASH")
-		}
 		return evaluateHash(operands[0])
 	case ast.Value_SERIALIZE_TO_CORE:
-		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to SERIALIZE_TO_CORE")
-		}
 		return evaluateSerialize(operands[0], false)
 	case ast.Value_SERIALIZE_TO_JSON:
-		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to SERIALIZE_TO_JSON")
-		}
 		return evaluateSerialize(operands[0], true)
 	case ast.Value_EQUAL:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to EQUAL")
-		}
 		var result bool
 		if operands[0].GetT() == ast.Value_PARAM && operands[1].GetT() != ast.Value_NIL {
 			if err := e.IndexParam(int(operands[0].GetU()), operands[1]); err != nil {
@@ -323,9 +307,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_LESS:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to LESS")
-		}
 		var result bool
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
@@ -348,9 +329,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_ADD:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to ADD")
-		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
 			return &ast.Value{
@@ -370,9 +348,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return bigIntToValue(new(big.Int).Add(a, b)), nil
 	case ast.Value_SUBTRACT:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to SUBTRACT")
-		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
 			return &ast.Value{
@@ -392,9 +367,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return bigIntToValue(new(big.Int).Sub(a, b)), nil
 	case ast.Value_MULTIPLY:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to MULTIPLY")
-		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
 			return &ast.Value{
@@ -414,9 +386,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return bigIntToValue(new(big.Int).Mul(a, b)), nil
 	case ast.Value_DIVIDE:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to DIVIDE")
-		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
 			if operands[1].GetU() == 0 {
@@ -442,9 +411,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return bigIntToValue(new(big.Int).Div(a, b)), nil
 	case ast.Value_MOD:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to MOD")
-		}
 		if operands[0].GetT() == ast.Value_UINT64 &&
 			operands[1].GetT() == ast.Value_UINT64 {
 			if operands[1].GetU() == 0 {
@@ -470,9 +436,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return bigIntToValue(new(big.Int).Mod(a, b)), nil
 	case ast.Value_NOT:
-		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to NOT")
-		}
 		if operands[0].GetT() != ast.Value_BOOL {
 			return nil, fmt.Errorf("Invalid operand type %s to NOT!", operands[0].GetT().String())
 		}
@@ -483,9 +446,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_AND:
-		if len(operands) == 0 {
-			return nil, fmt.Errorf("Invalid number of operands to AND")
-		}
 		result := true
 		for _, operand := range operands {
 			if operand.GetT() != ast.Value_BOOL {
@@ -503,9 +463,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_OR:
-		if len(operands) == 0 {
-			return nil, fmt.Errorf("Invalid number of operands to OR")
-		}
 		result := false
 		for _, operand := range operands {
 			if operand.GetT() != ast.Value_BOOL {
@@ -523,9 +480,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_SLICE:
-		if len(operands) != 3 {
-			return nil, fmt.Errorf("Invalid number of operands to SLICE")
-		}
 		if operands[0].GetT() != ast.Value_UINT64 ||
 			operands[1].GetT() != ast.Value_UINT64 ||
 			operands[2].GetT() != ast.Value_BYTES {
@@ -549,9 +503,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 			},
 		}, nil
 	case ast.Value_INDEX:
-		if len(operands) != 2 {
-			return nil, fmt.Errorf("Invalid number of operands to INDEX")
-		}
 		if operands[0].GetT() != ast.Value_UINT64 {
 			return nil, fmt.Errorf("Invalid operand type to INDEX")
 		}
@@ -565,9 +516,6 @@ func evaluateOp(op ast.Value_Type, operands []*ast.Value, e Environment) (*ast.V
 		}
 		return list[i], nil
 	case ast.Value_LEN:
-		if len(operands) != 1 {
-			return nil, fmt.Errorf("Invalid number of operands to LEN")
-		}
 		if operands[0].GetT() != ast.Value_BYTES {
 			return nil, fmt.Errorf("Invalid operand type to LEN")
 		}
@@ -655,9 +603,6 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 	case ast.Value_LIST:
 		return evaluateAstValues(list.GetChildren(), e)
 	case ast.Value_MAP:
-		if len(list.GetChildren()) != 2 {
-			return nil, fmt.Errorf("Invalid number of lists for map!")
-		}
 		f := list.GetChildren()[0]
 		list, err := evaluateList(list.GetChildren()[1], e)
 		if err != nil {
@@ -675,9 +620,6 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 		}
 		return results, nil
 	case ast.Value_FILTER:
-		if len(list.GetChildren()) != 2 {
-			return nil, fmt.Errorf("Invalid number of lists for map!")
-		}
 		f := list.GetChildren()[0]
 		list, err := evaluateList(list.GetChildren()[1], e)
 		if err != nil {
@@ -715,9 +657,6 @@ func evaluateHash(value *ast.Value) (*ast.Value, error) {
 	}
 	switch value.GetT() {
 	case ast.Value_SCRIPT:
-		if err := ast.IsValidScript(value); err != nil {
-			return nil, err
-		}
 		script := rpctypes.Script{
 			HashType: rpctypes.ScriptHashType(value.GetChildren()[1].GetU()),
 			Args:     rpctypes.Bytes(value.GetChildren()[2].GetRaw()),

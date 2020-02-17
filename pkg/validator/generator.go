@@ -139,9 +139,6 @@ func (c *context) generateSlice(expr *ast.Value, start, end uint64) (int, variab
 func (c *context) loopStart(expr *ast.Value) (int, variableType, error) {
 	map_funcs := []*ast.Value{}
 	for expr.GetT() == ast.Value_MAP {
-		if len(expr.GetChildren()) != 2 {
-			return -1, varTypeEmpty, fmt.Errorf("Invalid number of operands to MAP")
-		}
 		map_funcs = append([]*ast.Value{expr.GetChildren()[0]}, map_funcs...)
 		expr = expr.GetChildren()[1]
 	}
@@ -203,9 +200,6 @@ func (c *context) generateVariable(expr *ast.Value) (int, variableType, error) {
 		c.printfln("uint64_t v%d = %d;", i, expr.GetU())
 		return i, varTypeUint64, nil
 	case ast.Value_EQUAL:
-		if len(expr.GetChildren()) != 2 {
-			return -1, varTypeEmpty, fmt.Errorf("Invalid number of operands to EQUAL!")
-		}
 		a, at, err := c.generateVariable(expr.GetChildren()[0])
 		if err != nil {
 			return -1, varTypeEmpty, err
@@ -244,18 +238,12 @@ func (c *context) generateVariable(expr *ast.Value) (int, variableType, error) {
 		return i, t, nil
 	case ast.Value_SLICE:
 		children := expr.GetChildren()
-		if len(children) != 3 {
-			return -1, varTypeEmpty, fmt.Errorf("Invalid number of operands to SLICE!")
-		}
 		if children[0].GetT() != ast.Value_UINT64 ||
 			children[1].GetT() != ast.Value_UINT64 {
 			return -1, varTypeEmpty, fmt.Errorf("Invalid operand type to SLICE!")
 		}
 		return c.generateSlice(children[2], children[0].GetU(), children[1].GetU())
 	case ast.Value_ADD:
-		if len(expr.GetChildren()) != 2 {
-			return -1, varTypeEmpty, fmt.Errorf("Invalid number of operands to ADD!")
-		}
 		a, at, err := c.generateVariable(expr.GetChildren()[0])
 		if err != nil {
 			return -1, varTypeEmpty, err
@@ -293,9 +281,6 @@ func (c *context) generateVariable(expr *ast.Value) (int, variableType, error) {
 		c.printfln("%s v%d = v%d + v%d;", at.cType(), i, a, b)
 		return i, at, nil
 	case ast.Value_REDUCE:
-		if len(expr.GetChildren()) != 3 {
-			return -1, varTypeEmpty, fmt.Errorf("Invalid number of operands to REDUCE!")
-		}
 		initial, initialType, err := c.generateVariable(expr.GetChildren()[1])
 		if err != nil {
 			return -1, varTypeEmpty, err

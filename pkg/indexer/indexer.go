@@ -17,6 +17,7 @@ import (
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
+	"github.com/xxuejie/animagus/pkg/verifier"
 )
 
 const Version string = "0.0.1"
@@ -47,11 +48,21 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*I
 	hash := blake2bHash.Sum(nil)
 	values := make([]ValueContext, len(root.GetCalls()))
 	for i, call := range root.GetCalls() {
+		err = verifier.Verify(call.GetResult())
+		if err != nil {
+			return nil, fmt.Errorf("Verification failure for call %s: %s", call.GetName(), err)
+		}
 		valueContext, err := NewValueContext(call.GetName(), call.GetResult())
 		if err != nil {
 			return nil, err
 		}
 		values[i] = valueContext
+	}
+	for _, stream := range root.GetStreams() {
+		err = verifier.Verify(stream.GetFilter())
+		if err != nil {
+			return nil, fmt.Errorf("Verification failure for stream %s: %s", stream.GetName(), err)
+		}
 	}
 	// Test GraphQL query
 	client := graphql.NewClient(graphqlUrl)
