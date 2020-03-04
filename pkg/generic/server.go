@@ -71,6 +71,13 @@ type executeEnvironment struct {
 	s            *Server
 }
 
+func (e executeEnvironment) ReplaceArgs(args []*ast.Value) error {
+	if len(args) > 0 {
+		return fmt.Errorf("No arguments provided for replacement!")
+	}
+	return nil
+}
+
 func (e executeEnvironment) Arg(i int) *ast.Value {
 	return nil
 }

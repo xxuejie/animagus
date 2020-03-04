@@ -12,6 +12,7 @@ import (
 )
 
 type Environment interface {
+	ReplaceArgs(args []*ast.Value) error
 	Arg(i int) *ast.Value
 	Param(i int) *ast.Value
 	IndexParam(i int, value *ast.Value) error
@@ -42,6 +43,39 @@ func isListOp(expr *ast.Value) bool {
 }
 
 func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
+	var value *ast.Value
+	var err error
+	for {
+		value, err = evaluateValueNonRecursion(expr, e)
+		if err != nil {
+			return nil, err
+		}
+		if value.GetT() != ast.Value_TAIL_RECURSION {
+			break
+		}
+		// First test if at least an argument is modified, otherwise we run into
+		// infinite loop
+		isDifferent := false
+		for i, replacedArg := range value.GetChildren() {
+			currentArg := e.Arg(i)
+			if !proto.Equal(currentArg, replacedArg) {
+				isDifferent = true
+				break
+			}
+		}
+		if !isDifferent {
+			return nil, fmt.Errorf("Infinite loop reached!")
+		}
+		// Now replace arguments, and do another round of evaluation
+		err = e.ReplaceArgs(value.GetChildren())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
+}
+
+func evaluateValueNonRecursion(expr *ast.Value, e Environment) (*ast.Value, error) {
 	// Primitive value
 	if isPrimitive(expr) {
 		return expr, nil
@@ -64,7 +98,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		return evaluateOp(expr.GetT(), children, e)
 	}
 	if isGetOp(expr) {
-		operand, err := evaluateValue(expr.GetChildren()[0], e)
+		operand, err := evaluateValueNonRecursion(expr.GetChildren()[0], e)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +124,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		if len(children) != 3 {
 			return nil, fmt.Errorf("Not enough arguments for cond!")
 		}
-		predicate, err := evaluateValue(children[0], e)
+		predicate, err := evaluateValueNonRecursion(children[0], e)
 		if err != nil {
 			return nil, err
 		}
@@ -98,10 +132,19 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			return nil, fmt.Errorf("Invalid predicate to cond!")
 		}
 		if predicate.GetB() {
-			return evaluateValue(children[1], e)
+			return evaluateValueNonRecursion(children[1], e)
 		} else {
-			return evaluateValue(children[2], e)
+			return evaluateValueNonRecursion(children[2], e)
 		}
+	case ast.Value_TAIL_RECURSION:
+		args, err := evaluateAstValues(expr.GetChildren(), e)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Value{
+			T:        ast.Value_TAIL_RECURSION,
+			Children: args,
+		}, nil
 	case ast.Value_TRANSACTION:
 		inputCells, err := evaluateList(expr.GetChildren()[0], e)
 		if err != nil {
@@ -126,7 +169,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 				},
 			}
 		}
-		outputs, err := evaluateValue(expr.GetChildren()[1], e)
+		outputs, err := evaluateValueNonRecursion(expr.GetChildren()[1], e)
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +272,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 		})
 	case ast.Value_REDUCE:
 		f := expr.GetChildren()[0]
-		currentValue, err := evaluateValue(expr.GetChildren()[1], e)
+		currentValue, err := evaluateValueNonRecursion(expr.GetChildren()[1], e)
 		if err != nil {
 			return nil, err
 		}
@@ -238,7 +281,7 @@ func evaluateValue(expr *ast.Value, e Environment) (*ast.Value, error) {
 			return nil, err
 		}
 		for _, value := range list {
-			currentValue, err = evaluateValue(f, &prependEnvironment{
+			currentValue, err = evaluateValueNonRecursion(f, &prependEnvironment{
 				e: e,
 				args: []*ast.Value{
 					currentValue,
@@ -269,7 +312,7 @@ func evaluateAstValues(values []*ast.Value, e Environment) ([]*ast.Value, error)
 	evaluatedValues := make([]*ast.Value, len(values))
 	var err error
 	for i, value := range values {
-		evaluatedValues[i], err = evaluateValue(value, e)
+		evaluatedValues[i], err = evaluateValueNonRecursion(value, e)
 		if err != nil {
 			return nil, err
 		}
@@ -610,7 +653,7 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 		}
 		results := make([]*ast.Value, len(list))
 		for i, value := range list {
-			results[i], err = evaluateValue(f, &prependEnvironment{
+			results[i], err = evaluateValueNonRecursion(f, &prependEnvironment{
 				e:    e,
 				args: []*ast.Value{value},
 			})
@@ -627,7 +670,7 @@ func evaluateList(list *ast.Value, e Environment) ([]*ast.Value, error) {
 		}
 		results := make([]*ast.Value, 0)
 		for _, value := range list {
-			b, err := evaluateValue(f, &prependEnvironment{
+			b, err := evaluateValueNonRecursion(f, &prependEnvironment{
 				e:    e,
 				args: []*ast.Value{value},
 			})

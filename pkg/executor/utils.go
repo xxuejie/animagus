@@ -9,6 +9,22 @@ type prependEnvironment struct {
 	args []*ast.Value
 }
 
+func (e *prependEnvironment) ReplaceArgs(args []*ast.Value) error {
+	l := len(args)
+	if len(e.args) < l {
+		l = len(e.args)
+	}
+	for i := 0; i < l; i++ {
+		e.args[i] = args[i]
+	}
+	if len(args) > len(e.args) {
+		if err := e.ReplaceArgs(args[len(e.args):]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (e *prependEnvironment) Arg(i int) *ast.Value {
 	if i < len(e.args) {
 		return e.args[i]

@@ -280,6 +280,10 @@ func Verify(expr *ast.Value) error {
 		if len(expr.GetChildren()) != 3 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
 		}
+	case ast.Value_TAIL_RECURSION:
+		if len(expr.GetChildren()) == 0 {
+			return fmt.Errorf("To keep recursion going, at least one argument must be provided!")
+		}
 	default:
 		return fmt.Errorf("Invalid value type: %s", expr.GetT().String())
 	}

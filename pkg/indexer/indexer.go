@@ -477,6 +477,16 @@ type indexingEnvironment struct {
 	indexedValues map[int]*ast.Value
 }
 
+func (e *indexingEnvironment) ReplaceArgs(args []*ast.Value) error {
+	if len(args) > 1 {
+		return fmt.Errorf("Too many args provided")
+	}
+	if len(args) == 1 {
+		e.cell = args[0]
+	}
+	return nil
+}
+
 func (e *indexingEnvironment) Arg(i int) *ast.Value {
 	if i == 0 {
 		return e.cell
@@ -532,22 +542,36 @@ type streamExecutingEnvironment struct {
 	args []*ast.Value
 }
 
-func (e streamExecutingEnvironment) Arg(i int) *ast.Value {
+func (e *streamExecutingEnvironment) ReplaceArgs(args []*ast.Value) error {
+	if len(args) > len(e.args) {
+		return fmt.Errorf("Too many args provided")
+	}
+	l := len(args)
+	if len(e.args) < l {
+		l = len(e.args)
+	}
+	for i := 0; i < l; i++ {
+		e.args[i] = args[i]
+	}
+	return nil
+}
+
+func (e *streamExecutingEnvironment) Arg(i int) *ast.Value {
 	if i < 0 || i >= len(e.args) {
 		return nil
 	}
 	return e.args[i]
 }
 
-func (e streamExecutingEnvironment) Param(i int) *ast.Value {
+func (e *streamExecutingEnvironment) Param(i int) *ast.Value {
 	return nil
 }
 
-func (e streamExecutingEnvironment) IndexParam(i int, value *ast.Value) error {
+func (e *streamExecutingEnvironment) IndexParam(i int, value *ast.Value) error {
 	return fmt.Errorf("Indexing param is not allowed!")
 }
 
-func (e streamExecutingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
+func (e *streamExecutingEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	return nil, fmt.Errorf("Querying cell is not allowed!")
 }
 
@@ -564,7 +588,7 @@ func executeStreamingFilter(filter *ast.Value, cell *ast.Value, insert bool, ind
 	} else {
 		i = "revert"
 	}
-	e := streamExecutingEnvironment{
+	e := &streamExecutingEnvironment{
 		args: []*ast.Value{
 			cell,
 			&ast.Value{

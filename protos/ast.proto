@@ -99,6 +99,7 @@ message Value {
 
     // Special operations
     COND = 120;
+    TAIL_RECURSION = 121;
   }
   Type t = 1;
   oneof primitive {
