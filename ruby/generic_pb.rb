@@ -14,5 +14,5 @@ Google::Protobuf::DescriptorPool.generated_pool.build do
 end
 
 module Generic
-  GenericParams = Google::Protobuf::DescriptorPool.generated_pool.lookup("generic.GenericParams").msgclass
+  GenericParams = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("generic.GenericParams").msgclass
 end

@@ -95,9 +95,9 @@ Google::Protobuf::DescriptorPool.generated_pool.build do
 end
 
 module Ast
-  Value = Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Value").msgclass
-  Value::Type = Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Value.Type").enummodule
-  Call = Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Call").msgclass
-  Stream = Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Stream").msgclass
-  Root = Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Root").msgclass
+  Value = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Value").msgclass
+  Value::Type = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Value.Type").enummodule
+  Call = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Call").msgclass
+  Stream = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Stream").msgclass
+  Root = ::Google::Protobuf::DescriptorPool.generated_pool.lookup("ast.Root").msgclass
 end
