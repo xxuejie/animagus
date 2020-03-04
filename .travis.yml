@@ -12,6 +12,7 @@ install:
     && curl -LO 'https://github.com/google/protobuf/releases/download/v3.11.2/protoc-3.11.2-linux-x86_64.zip'
     && unzip protoc-3.11.2-linux-x86_64.zip
     && popd
+  - gem install grpc grpc-tools
 
 matrix:
   include:
