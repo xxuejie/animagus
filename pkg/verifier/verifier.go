@@ -144,15 +144,9 @@ func Verify(expr *ast.Value) error {
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
 		}
-		if expr.GetChildren()[0].GetT() != ast.Value_CELL {
-			return fmt.Errorf("%s only accepts CELL!", expr.GetT().String())
-		}
 	case ast.Value_GET_OUT_POINT:
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
-		}
-		if expr.GetChildren()[0].GetT() != ast.Value_CELL {
-			return fmt.Errorf("%s only accepts CELL!", expr.GetT().String())
 		}
 		if len(expr.GetChildren()[0].GetChildren()) < 5 {
 			return fmt.Errorf("Specified cell does not provide OutPoint!")
@@ -165,9 +159,6 @@ func Verify(expr *ast.Value) error {
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
 		}
-		if expr.GetChildren()[0].GetT() != ast.Value_SCRIPT {
-			return fmt.Errorf("%s only accepts SCRIPT!", expr.GetT().String())
-		}
 	case ast.Value_GET_CELL_DEPS:
 		fallthrough
 	case ast.Value_GET_HEADER_DEPS:
@@ -179,9 +170,6 @@ func Verify(expr *ast.Value) error {
 	case ast.Value_GET_WITNESSES:
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
-		}
-		if expr.GetChildren()[0].GetT() != ast.Value_TRANSACTION {
-			return fmt.Errorf("%s only accepts TRANSACTION!", expr.GetT().String())
 		}
 	case ast.Value_GET_COMPACT_TARGET:
 		fallthrough
@@ -205,15 +193,9 @@ func Verify(expr *ast.Value) error {
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
 		}
-		if expr.GetChildren()[0].GetT() != ast.Value_HEADER {
-			return fmt.Errorf("%s only accepts HEADER!", expr.GetT().String())
-		}
 	case ast.Value_GET_HEADER:
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
-		}
-		if expr.GetChildren()[0].GetT() != ast.Value_CELL {
-			return fmt.Errorf("%s only accepts CELL!", expr.GetT().String())
 		}
 		if len(expr.GetChildren()[0].GetChildren()) < 6 {
 			return fmt.Errorf("Specified cell does not provide Header!")
