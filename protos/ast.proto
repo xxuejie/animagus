@@ -14,7 +14,7 @@ message Value {
     ERROR = 4;
 
     // In animagus, we distinguish args and params in the following way:
-    // * If a Value struct contains an arg, it will be interpretted as a
+    // * If a Value struct contains an arg, it will be interpreted as a
     // function, when used in constructs such as REDUCE or MAP, args acts
     // as placeholders for the values to test/transform.
     // * Params, on the other hand, denotes user input when calling RPCs,
@@ -22,6 +22,7 @@ message Value {
     // to transfer to, those will be represented via parameters
     ARG = 16;
     PARAM = 17;
+
     // Blockchain data structures
     OUT_POINT = 18;
     CELL_INPUT = 19;
