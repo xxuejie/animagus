@@ -17,11 +17,11 @@ The name animagus comes from [Harry Potter series](https://harrypotter.fandom.co
 
 Note this project is still in fast development phase, the AST used is not yet in a stable state. We might modify it to add more capabilities.
 
-We will continue to add docs here explaining how this project works once the AST is in a relatively more stable state, but if you want to get a taste right now, here's the [slide](https://github.com/xxuejie/animagus/blob/master/docs/A%20new%20dapp%20framework.pdf) for an introductory talk on animagus.
+We will continue to add docs here explaining how this project works once the AST is in a relatively more stable state, but if you want to get a taste right now, here's the [slide](https://github.com/xxuejie/animagus/blob/develop/docs/A%20new%20dapp%20framework.pdf) for an introductory talk on animagus.
 
 # How to Run
 
-We've packed a small [example](https://github.com/xxuejie/animagus/tree/master/examples/balance) that can aggregate balances of different accounts in CKB. This can help overcome some of the challenges brought by CKB's unique flexibility.
+We've packed a small [example](https://github.com/xxuejie/animagus/tree/develop/examples/balance) that can aggregate balances of different accounts in CKB. This can help overcome some of the challenges brought by CKB's unique flexibility.
 
 Animagus requires the following dependencies:
 
@@ -58,7 +58,7 @@ I'm using docker to quickly start that a temporary Redis server, but you can als
 $ docker run -d --rm -p 6379:6379 --name animagus-redis redis:alpine
 ```
 
-First thing we need to do, is to generate an AST dump file for animagus, a [sample](https://github.com/xxuejie/animagus/blob/master/examples/balance/generate_ast.go) has been prepared for this purpose:
+First thing we need to do, is to generate an AST dump file for animagus, a [sample](https://github.com/xxuejie/animagus/blob/develop/examples/balance/generate_ast.go) has been prepared for this purpose:
 
 ```
 $ mkdir -p /tmp/animagus-demo
@@ -79,7 +79,7 @@ $ ./animagus -astFile=./examples/balance/balance.bin
 
 Notice if you use different ports for GraphQL server and Redis, you might need to tweak animagus start flags, see `./animagus --help` for details
 
-You will notice logs since animagus is indexing cells. We have prepared a small [file](https://github.com/xxuejie/animagus/blob/master/examples/balance/call_balance.rb) that you can use to check balances. Given the `args` part in a lock script, this file queries against animagus for the current balance of that account:
+You will notice logs since animagus is indexing cells. We have prepared a small [file](https://github.com/xxuejie/animagus/blob/develop/examples/balance/call_balance.rb) that you can use to check balances. Given the `args` part in a lock script, this file queries against animagus for the current balance of that account:
 
 ```
 $ cd /tmp/animagus-demo/animagus/examples/balance
