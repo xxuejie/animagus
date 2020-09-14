@@ -148,9 +148,6 @@ func Verify(expr *ast.Value) error {
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
 		}
-		if len(expr.GetChildren()[0].GetChildren()) < 5 {
-			return fmt.Errorf("Specified cell does not provide OutPoint!")
-		}
 	case ast.Value_GET_CODE_HASH:
 		fallthrough
 	case ast.Value_GET_HASH_TYPE:
@@ -196,9 +193,6 @@ func Verify(expr *ast.Value) error {
 	case ast.Value_GET_HEADER:
 		if len(expr.GetChildren()) != 1 {
 			return fmt.Errorf("Invalid number of arguments for %s!", expr.GetT().String())
-		}
-		if len(expr.GetChildren()[0].GetChildren()) < 6 {
-			return fmt.Errorf("Specified cell does not provide Header!")
 		}
 	case ast.Value_HASH:
 		if len(expr.GetChildren()) != 1 {
