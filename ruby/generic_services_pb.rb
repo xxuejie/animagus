@@ -14,8 +14,8 @@ module Generic
       self.unmarshal_class_method = :decode
       self.service_name = 'generic.GenericService'
 
-      rpc :Call, GenericParams, Ast::Value
-      rpc :Stream, GenericParams, stream(Ast::Value)
+      rpc :Call, ::Generic::GenericParams, ::Ast::Value
+      rpc :Stream, ::Generic::GenericParams, stream(::Ast::Value)
     end
 
     Stub = Service.rpc_stub_class
