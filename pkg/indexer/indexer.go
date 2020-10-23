@@ -3,19 +3,19 @@ package indexer
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
-	"github.com/machinebox/graphql"
 	blake2b "github.com/minio/blake2b-simd"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/executor"
+	"github.com/xxuejie/animagus/pkg/rpc"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
 	"github.com/xxuejie/animagus/pkg/verifier"
 )
@@ -23,14 +23,15 @@ import (
 const Version string = "0.0.1"
 
 type Indexer struct {
-	hash          []byte
-	values        []ValueContext
-	streams       []*ast.Stream
-	redisPool     *redis.Pool
-	graphqlClient *graphql.Client
+	hash       []byte
+	values     []ValueContext
+	streams    []*ast.Stream
+	redisPool  *redis.Pool
+	httpClient *http.Client
+	url        string
 }
 
-func NewIndexer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Indexer, error) {
+func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Indexer, error) {
 	root := &ast.Root{}
 	err := proto.Unmarshal(astContent, root)
 	if err != nil {
@@ -64,25 +65,26 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*I
 			return nil, fmt.Errorf("Verification failure for stream %s: %s", stream.GetName(), err)
 		}
 	}
-	// Test GraphQL query
-	client := graphql.NewClient(graphqlUrl)
-	// client.Log = func(s string) {
-	// 	fmt.Printf("GraphQL log: %s\n", s)
-	// }
-	err = client.Run(context.Background(), graphql.NewRequest(`
-query {
-  apiVersion
-}
-`), nil)
+
+	// Test rpc
+	client := http.Client{}
+	params := rpc.NewRequestParams(
+		"get_tip_block_number",
+		[]string{},
+	)
+	var blockNumber string
+	err = rpc.RpcRequest(&client, rpcUrl, params, &blockNumber)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Indexer{
-		values:        values,
-		hash:          hash,
-		redisPool:     redisPool,
-		graphqlClient: client,
-		streams:       root.GetStreams(),
+		values:     values,
+		hash:       hash,
+		redisPool:  redisPool,
+		httpClient: &client,
+		url:        rpcUrl,
+		streams:    root.GetStreams(),
 	}, nil
 }
 
@@ -157,79 +159,65 @@ func (i *Indexer) Run() error {
 	}
 }
 
-func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
-	req := graphql.NewRequest(`
-query($blockNumber: String) {
-  getBlock(number: $blockNumber) {
-    header {
-      parent_hash
-      hash
-      number
-    }
-    transactions {
-      hash
-      inputs {
-        previous_output {
-          cell {
-            capacity
-            lock {
-              code_hash
-              hash_type
-              args
-            }
-            type {
-              code_hash
-              hash_type
-              args
-            }
-          }
-          cell_data {
-            content
-          }
-          tx_hash
-          index
-        }
-      }
-      outputs {
-        capacity
-        lock {
-          code_hash
-          hash_type
-          args
-        }
-        type {
-          code_hash
-          hash_type
-          args
-        }
-      }
-      cells_data {
-        content
-      }
-    }
-  }
-}
-`)
-	req.Var("blockNumber", rpctypes.Uint64(blockNumber).EncodeToString())
-	var response getBlockResponse
-	err := i.graphqlClient.Run(context.Background(), req, &response)
-	if err != nil {
-		return nil, err
+func (i *Indexer) getPreviousOutput(outPoint rpctypes.OutPoint) (*rpctypes.CellOutput, *rpctypes.Bytes, error) {
+	var emptyHash rpctypes.Hash
+	if outPoint.TxHash == emptyHash {
+		return nil, nil, nil
 	}
-	return response.GetBlock, nil
+	txHashStr := fmt.Sprintf("0x%x", outPoint.TxHash)
+	params := rpc.NewRequestParams(
+		"get_transaction",
+		[]string{txHashStr},
+	)
+	transactionWithStatus := rpctypes.TransactionWithStatusView{}
+	err := rpc.RpcRequest(i.httpClient, i.url, params, &transactionWithStatus)
+	transactionView := &transactionWithStatus.Transaction
+	index := outPoint.Index
+	output := transactionView.Outputs[index]
+	data := transactionView.OutputsData[index]
+	return &output, &data, err
+}
+
+func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
+	params := rpc.NewRequestParams(
+		"get_block_by_number",
+		[]string{fmt.Sprintf("0x%x", blockNumber)},
+	)
+	blockView := rpctypes.BlockView{}
+	err := rpc.RpcRequest(i.httpClient, i.url, params, &blockView)
+	var emptyHash rpctypes.Hash
+	for txIndex, tx := range blockView.Transactions {
+		for inputIndex, input := range tx.RawTransaction.Inputs {
+			previousOutput := input.PreviousOutput
+			if previousOutput.TxHash != emptyHash {
+				output, data, err := i.getPreviousOutput(previousOutput)
+
+				if err != nil {
+					return nil, err
+				}
+				blockView.Transactions[txIndex].Inputs[inputIndex].PreviousOutput.Cell = output
+				rawData := rpctypes.Raw([]byte(*data))
+				blockView.Transactions[txIndex].Inputs[inputIndex].PreviousOutput.CellData = &rawData
+			}
+		}
+	}
+
+	return &blockView, err
 }
 
 func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) error {
 	var err error
 	for _, tx := range block.Transactions {
 		for _, input := range tx.RawTransaction.Inputs {
-			if input.PreviousOutput.GraphqlCell != nil &&
-				input.PreviousOutput.GraphqlCellData != nil {
-				err = i.processCell(*input.PreviousOutput.GraphqlCell,
-					*input.PreviousOutput.GraphqlCellData.Content,
+			if input.PreviousOutput.Cell != nil &&
+				input.PreviousOutput.CellData != nil {
+				err = i.processCell(
+					*input.PreviousOutput.Cell,
+					*input.PreviousOutput.CellData,
 					input.PreviousOutput,
 					false,
-					commands)
+					commands,
+				)
 				if err != nil {
 					return err
 				}
@@ -237,14 +225,17 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 		}
 
 		for outputIndex, output := range tx.RawTransaction.Outputs {
-			err = i.processCell(output,
-				*tx.RawTransaction.GraphqlCellsData[outputIndex].Content,
+			rawData := rpctypes.Raw([]byte(tx.RawTransaction.OutputsData[outputIndex]))
+			err = i.processCell(
+				output,
+				rawData,
 				rpctypes.OutPoint{
 					TxHash: tx.Hash,
 					Index:  rpctypes.Uint32(outputIndex),
 				},
 				true,
-				commands)
+				commands,
+			)
 			if err != nil {
 				return err
 			}

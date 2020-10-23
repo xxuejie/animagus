@@ -5,6 +5,11 @@ type TransactionView struct {
 	Hash Hash `json:"hash"`
 }
 
+type TransactionWithStatusView struct {
+	Transaction TransactionView `json:"transaction"`
+	TxStatus    TxStatus        `json:"tx_status"`
+}
+
 type HeaderView struct {
 	Header
 	Hash Hash `json:"hash"`

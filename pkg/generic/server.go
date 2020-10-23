@@ -2,17 +2,18 @@ package generic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
+	"net/http"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
-	"github.com/machinebox/graphql"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/coretypes"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/indexer"
+	"github.com/xxuejie/animagus/pkg/rpc"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
 	"github.com/xxuejie/animagus/pkg/verifier"
 )
@@ -23,13 +24,14 @@ type callInfo struct {
 }
 
 type Server struct {
-	calls         map[string]callInfo
-	streams       []*ast.Stream
-	redisPool     *redis.Pool
-	graphqlClient *graphql.Client
+	calls      map[string]callInfo
+	streams    []*ast.Stream
+	redisPool  *redis.Pool
+	httpClient *http.Client
+	url        string
 }
 
-func NewServer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Server, error) {
+func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server, error) {
 	root := &ast.Root{}
 	err := proto.Unmarshal(astContent, root)
 	if err != nil {
@@ -56,12 +58,12 @@ func NewServer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Se
 			return nil, fmt.Errorf("Verification failure for stream %s: %s", stream.GetName(), err)
 		}
 	}
-	client := graphql.NewClient(graphqlUrl)
 	return &Server{
-		calls:         calls,
-		streams:       root.GetStreams(),
-		redisPool:     redisPool,
-		graphqlClient: client,
+		calls:      calls,
+		streams:    root.GetStreams(),
+		redisPool:  redisPool,
+		httpClient: &http.Client{},
+		url:        rpcUrl,
 	}, nil
 }
 
@@ -97,6 +99,53 @@ type getCellsResponse struct {
 	GetCells []*rpctypes.OutPoint
 }
 
+func (s *Server) getCells(coreOutPoints *[]coretypes.OutPoint) ([]*rpctypes.OutPoint, error) {
+	var result []*rpctypes.OutPoint
+	for _, outPoint := range *coreOutPoints {
+		// get transaction
+		txHashStr := fmt.Sprintf("0x%x", outPoint.TxHash())
+		params := rpc.NewRequestParams(
+			"get_transaction",
+			[]string{txHashStr},
+		)
+		transactionWithStatus := rpctypes.TransactionWithStatusView{}
+		err := rpc.RpcRequest(s.httpClient, s.url, params, &transactionWithStatus)
+		if err != nil {
+			return nil, err
+		}
+		transactionView := &transactionWithStatus.Transaction
+		index := outPoint.Index()
+		cell := transactionView.Outputs[index]
+		originData := &transactionView.OutputsData[index]
+		raw := rpctypes.Raw([]byte(*originData))
+
+		// get header
+		blockHashStr := fmt.Sprintf("0x%x", *transactionWithStatus.TxStatus.BlockHash)
+		blockParams := rpc.NewRequestParams(
+			"get_header",
+			[]string{blockHashStr},
+		)
+		header := rpctypes.Header{}
+		err = rpc.RpcRequest(s.httpClient, s.url, blockParams, &header)
+		if err != nil {
+			return nil, err
+		}
+		txHash := []byte(outPoint.TxHash())
+		var resultTxHash rpctypes.Hash
+		json.Unmarshal(txHash, &resultTxHash)
+		resultIndex := rpctypes.Uint32(outPoint.Index())
+		resultOutPoint := rpctypes.OutPoint{
+			TxHash:   resultTxHash,
+			Index:    resultIndex,
+			Cell:     &cell,
+			CellData: &raw,
+			Header:   &header,
+		}
+		result = append(result, &resultOutPoint)
+	}
+	return result, nil
+}
+
 func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	queryIndex := e.valueContext.QueryIndex(query)
 	if queryIndex == -1 {
@@ -126,60 +175,15 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 			return nil, fmt.Errorf("OutPoint %x verification failure!", slice)
 		}
 	}
-	req := graphql.NewRequest(fmt.Sprintf(`
-query {
-  getCells(outPoints: %s, skipMissing: true) {
-    cell {
-      capacity
-      lock {
-        code_hash
-        hash_type
-        args
-      }
-      type {
-        code_hash
-        hash_type
-        args
-      }
-    }
-    cell_data {
-      content
-    }
-    tx_hash
-    index
-    header {
-      compact_target
-      parent_hash
-      timestamp
-      number
-      epoch
-      transactions_root
-      proposals_hash
-      uncles_hash
-      dao
-      nonce
-    }
-  }
-}
-`, assembleQueryString(outPoints)))
-	var response getCellsResponse
-	err = e.s.graphqlClient.Run(context.Background(), req, &response)
+	resultCells, err := e.s.getCells(&outPoints)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]*ast.Value, len(response.GetCells))
-	for i, cell := range response.GetCells {
-		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content, *cell, cell.GraphqlHeader)
+	results := make([]*ast.Value, len(resultCells))
+	for i, cell := range resultCells {
+		results[i] = ast.ConvertCell(*cell.Cell, *cell.CellData, *cell, cell.Header)
 	}
 	return results, nil
-}
-
-func assembleQueryString(outPoints []coretypes.OutPoint) string {
-	pieces := make([]string, len(outPoints))
-	for i, outPoint := range outPoints {
-		pieces[i] = fmt.Sprintf("{txHash: \"0x%x\", index: \"0x%x\"}", outPoint.TxHash(), outPoint.Index())
-	}
-	return fmt.Sprintf("[%s]", strings.Join(pieces, ", "))
 }
 
 func (s *Server) Call(ctx context.Context, p *GenericParams) (*ast.Value, error) {
