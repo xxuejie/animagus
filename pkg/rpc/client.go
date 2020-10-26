@@ -31,7 +31,13 @@ func NewRequestParams(method string, params []string) RequestParams {
 
 func RpcRequest(client *http.Client, url string, params RequestParams, target interface{}) error {
 	b, _ := json.Marshal(params)
-	resp, err := client.Post(url, "application/json", strings.NewReader(string(b)))
+	bodyReader := strings.NewReader(string(b))
+	req, err := http.NewRequest("POST", url, bodyReader)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

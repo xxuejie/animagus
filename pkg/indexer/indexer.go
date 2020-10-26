@@ -67,7 +67,13 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Index
 	}
 
 	// Test rpc
-	client := http.Client{}
+	client := http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+		},
+	}
+
 	params := rpc.NewRequestParams(
 		"get_tip_block_number",
 		[]string{},
@@ -159,12 +165,8 @@ func (i *Indexer) Run() error {
 	}
 }
 
-func (i *Indexer) getPreviousOutput(outPoint rpctypes.OutPoint) (*rpctypes.CellOutput, *rpctypes.Bytes, error) {
-	var emptyHash rpctypes.Hash
-	if outPoint.TxHash == emptyHash {
-		return nil, nil, nil
-	}
-	txHashStr := fmt.Sprintf("0x%x", outPoint.TxHash)
+func (i *Indexer) getTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionView, error) {
+	txHashStr := fmt.Sprintf("0x%x", *txHash)
 	params := rpc.NewRequestParams(
 		"get_transaction",
 		[]string{txHashStr},
@@ -172,10 +174,78 @@ func (i *Indexer) getPreviousOutput(outPoint rpctypes.OutPoint) (*rpctypes.CellO
 	transactionWithStatus := rpctypes.TransactionWithStatusView{}
 	err := rpc.RpcRequest(i.httpClient, i.url, params, &transactionWithStatus)
 	transactionView := &transactionWithStatus.Transaction
-	index := outPoint.Index
-	output := transactionView.Outputs[index]
-	data := transactionView.OutputsData[index]
-	return &output, &data, err
+
+	return transactionView, err
+}
+
+func (i *Indexer) getTransactions(txHashes []rpctypes.Hash) ([]*rpctypes.TransactionView, error) {
+	txHashLength := len(txHashes)
+	if txHashLength == 0 {
+		return []*rpctypes.TransactionView{}, nil
+	}
+
+	type transactionWithError struct {
+		TransactionView *rpctypes.TransactionView
+		Err             error
+	}
+
+	done := make(chan *transactionWithError, txHashLength)
+
+	for _, txHash := range txHashes {
+		go func(txHash rpctypes.Hash) {
+			transactionView, err := i.getTransaction(&txHash)
+
+			done <- &transactionWithError{
+				TransactionView: transactionView,
+				Err:             err,
+			}
+		}(txHash)
+	}
+
+	txMap := make(map[rpctypes.Hash]rpctypes.TransactionView)
+	transactionViews := []*rpctypes.TransactionView{}
+	for i := 0; i < txHashLength; i++ {
+		txViewWithError := <-done
+		err := txViewWithError.Err
+		if err != nil {
+			return nil, err
+		}
+		txView := txViewWithError.TransactionView
+		txMap[txView.Hash] = *txView
+		transactionViews = append(transactionViews, txView)
+
+		if i == txHashLength-1 {
+			close(done)
+		}
+	}
+
+	return transactionViews, nil
+}
+
+func (i *Indexer) getAllTransactions(txHashes []rpctypes.Hash, size int) ([]*rpctypes.TransactionView, error) {
+	var txHashSlices [][]rpctypes.Hash
+	txHashLength := len(txHashes)
+	for i := 0; i < txHashLength; i += size {
+		rightEdge := i + size
+		if rightEdge > txHashLength {
+			rightEdge = txHashLength
+		}
+		hashes := txHashes[i:rightEdge]
+		txHashSlices = append(txHashSlices, hashes)
+	}
+
+	var transactionViews []*rpctypes.TransactionView
+	for _, slice := range txHashSlices {
+		txs, err := i.getTransactions(slice)
+		if err != nil {
+			return txs, err
+		}
+		for _, tx := range txs {
+			transactionViews = append(transactionViews, tx)
+		}
+	}
+
+	return transactionViews, nil
 }
 
 func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
@@ -185,20 +255,59 @@ func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
 	)
 	blockView := rpctypes.BlockView{}
 	err := rpc.RpcRequest(i.httpClient, i.url, params, &blockView)
+	if err != nil {
+		return nil, err
+	}
+
 	var emptyHash rpctypes.Hash
+
+	type previousOutputInfo struct {
+		PreviousOutput *rpctypes.OutPoint
+		TxIndex        int
+		InputIndex     int
+	}
+
+	set := make(map[rpctypes.Hash]int)
+	var previousOutputs []previousOutputInfo
 	for txIndex, tx := range blockView.Transactions {
 		for inputIndex, input := range tx.RawTransaction.Inputs {
-			previousOutput := input.PreviousOutput
-			if previousOutput.TxHash != emptyHash {
-				output, data, err := i.getPreviousOutput(previousOutput)
-
-				if err != nil {
-					return nil, err
+			if input.PreviousOutput.TxHash != emptyHash {
+				previous := previousOutputInfo{
+					PreviousOutput: &input.PreviousOutput,
+					TxIndex:        txIndex,
+					InputIndex:     inputIndex,
 				}
-				blockView.Transactions[txIndex].Inputs[inputIndex].PreviousOutput.Cell = output
-				rawData := rpctypes.Raw([]byte(*data))
-				blockView.Transactions[txIndex].Inputs[inputIndex].PreviousOutput.CellData = &rawData
+				previousOutputs = append(previousOutputs, previous)
+				set[input.PreviousOutput.TxHash] = 1
 			}
+		}
+	}
+
+	var previousTxHashes []rpctypes.Hash
+	for key := range set {
+		previousTxHashes = append(previousTxHashes, key)
+	}
+
+	if len(previousOutputs) > 0 {
+		transactionViews, err := i.getAllTransactions(previousTxHashes, 50)
+
+		if err != nil {
+			return nil, err
+		}
+
+		txMap := make(map[rpctypes.Hash]rpctypes.TransactionView)
+		for _, txView := range transactionViews {
+			txMap[txView.Hash] = *txView
+		}
+
+		for _, su := range previousOutputs {
+			txView := txMap[su.PreviousOutput.TxHash]
+			idx := su.PreviousOutput.Index
+			cell := txView.Outputs[idx]
+			data := txView.OutputsData[idx]
+			blockView.Transactions[su.TxIndex].Inputs[su.InputIndex].PreviousOutput.Cell = &cell
+			rawData := rpctypes.Raw([]byte(data))
+			blockView.Transactions[su.TxIndex].Inputs[su.InputIndex].PreviousOutput.CellData = &rawData
 		}
 	}
 
