@@ -2,7 +2,6 @@ package generic
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 
@@ -130,7 +129,7 @@ func (s *Server) getCells(coreOutPoints *[]coretypes.OutPoint) ([]*rpctypes.OutP
 		}
 		txHash := []byte(outPoint.TxHash())
 		var resultTxHash rpctypes.Hash
-		json.Unmarshal(txHash, &resultTxHash)
+		copy(resultTxHash[:], txHash)
 		resultIndex := rpctypes.Uint32(outPoint.Index())
 		resultOutPoint := rpctypes.OutPoint{
 			TxHash:   resultTxHash,
