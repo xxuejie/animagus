@@ -2,9 +2,12 @@ package rpc
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/xxuejie/animagus/pkg/rpctypes"
 )
 
 type responseBody struct {
@@ -66,4 +69,87 @@ func (c *Client) RpcRequest(params RequestParams, target interface{}) error {
 
 	e := json.Unmarshal(result, hr)
 	return e
+}
+
+func (c *Client) GetTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionWithStatusView, error) {
+	txHashStr := fmt.Sprintf("0x%x", *txHash)
+	params := NewRequestParams(
+		"get_transaction",
+		[]string{txHashStr},
+	)
+	transactionWithStatus := rpctypes.TransactionWithStatusView{}
+	err := c.RpcRequest(params, &transactionWithStatus)
+	// transactionView := &transactionWithStatus.Transaction
+
+	return &transactionWithStatus, err
+}
+
+func (c *Client) getTransactions(txHashes []rpctypes.Hash) ([]*rpctypes.TransactionWithStatusView, error) {
+	txHashLength := len(txHashes)
+	if txHashLength == 0 {
+		return []*rpctypes.TransactionWithStatusView{}, nil
+	}
+
+	type transactionWithError struct {
+		TransactionWithStatusView *rpctypes.TransactionWithStatusView
+		Err                       error
+	}
+
+	done := make(chan *transactionWithError, txHashLength)
+
+	for _, txHash := range txHashes {
+		go func(txHash rpctypes.Hash) {
+			transactionWithStatus, err := c.GetTransaction(&txHash)
+
+			done <- &transactionWithError{
+				TransactionWithStatusView: transactionWithStatus,
+				Err:                       err,
+			}
+		}(txHash)
+	}
+
+	txMap := make(map[rpctypes.Hash]rpctypes.TransactionWithStatusView)
+	transactionWithStatusViews := []*rpctypes.TransactionWithStatusView{}
+	for i := 0; i < txHashLength; i++ {
+		txViewWithError := <-done
+		err := txViewWithError.Err
+		if err != nil {
+			return nil, err
+		}
+		txWithStatusView := txViewWithError.TransactionWithStatusView
+		txMap[txWithStatusView.Transaction.Hash] = *txWithStatusView
+		transactionWithStatusViews = append(transactionWithStatusViews, txWithStatusView)
+
+		if i == txHashLength-1 {
+			close(done)
+		}
+	}
+
+	return transactionWithStatusViews, nil
+}
+
+func (c *Client) GetAllTransactions(txHashes []rpctypes.Hash, size int) ([]*rpctypes.TransactionWithStatusView, error) {
+	var txHashSlices [][]rpctypes.Hash
+	txHashLength := len(txHashes)
+	for i := 0; i < txHashLength; i += size {
+		rightEdge := i + size
+		if rightEdge > txHashLength {
+			rightEdge = txHashLength
+		}
+		hashes := txHashes[i:rightEdge]
+		txHashSlices = append(txHashSlices, hashes)
+	}
+
+	var transactionWithStatusViews []*rpctypes.TransactionWithStatusView
+	for _, slice := range txHashSlices {
+		txsWithStatus, err := c.getTransactions(slice)
+		if err != nil {
+			return txsWithStatus, err
+		}
+		for _, tx := range txsWithStatus {
+			transactionWithStatusViews = append(transactionWithStatusViews, tx)
+		}
+	}
+
+	return transactionWithStatusViews, nil
 }
