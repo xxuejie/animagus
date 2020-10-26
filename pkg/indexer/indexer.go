@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -23,12 +22,11 @@ import (
 const Version string = "0.0.1"
 
 type Indexer struct {
-	hash       []byte
-	values     []ValueContext
-	streams    []*ast.Stream
-	redisPool  *redis.Pool
-	httpClient *http.Client
-	url        string
+	hash      []byte
+	values    []ValueContext
+	streams   []*ast.Stream
+	redisPool *redis.Pool
+	rpcClient *rpc.Client
 }
 
 func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Indexer, error) {
@@ -67,30 +65,24 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Index
 	}
 
 	// Test rpc
-	client := http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 100,
-		},
-	}
+	client := rpc.NewClient(rpcUrl)
 
 	params := rpc.NewRequestParams(
 		"get_tip_block_number",
 		[]string{},
 	)
 	var blockNumber string
-	err = rpc.RpcRequest(&client, rpcUrl, params, &blockNumber)
+	err = client.RpcRequest(params, &blockNumber)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Indexer{
-		values:     values,
-		hash:       hash,
-		redisPool:  redisPool,
-		httpClient: &client,
-		url:        rpcUrl,
-		streams:    root.GetStreams(),
+		values:    values,
+		hash:      hash,
+		redisPool: redisPool,
+		rpcClient: client,
+		streams:   root.GetStreams(),
 	}, nil
 }
 
@@ -172,7 +164,7 @@ func (i *Indexer) getTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionVi
 		[]string{txHashStr},
 	)
 	transactionWithStatus := rpctypes.TransactionWithStatusView{}
-	err := rpc.RpcRequest(i.httpClient, i.url, params, &transactionWithStatus)
+	err := i.rpcClient.RpcRequest(params, &transactionWithStatus)
 	transactionView := &transactionWithStatus.Transaction
 
 	return transactionView, err
@@ -254,7 +246,7 @@ func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
 		[]string{fmt.Sprintf("0x%x", blockNumber)},
 	)
 	blockView := rpctypes.BlockView{}
-	err := rpc.RpcRequest(i.httpClient, i.url, params, &blockView)
+	err := i.rpcClient.RpcRequest(params, &blockView)
 	if err != nil {
 		return nil, err
 	}

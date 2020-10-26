@@ -29,15 +29,32 @@ func NewRequestParams(method string, params []string) RequestParams {
 	}
 }
 
-func RpcRequest(client *http.Client, url string, params RequestParams, target interface{}) error {
+type Client struct {
+	HttpClient *http.Client
+	Url        string
+}
+
+func NewClient(url string) *Client {
+	return &Client{
+		HttpClient: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 100,
+			},
+		},
+		Url: url,
+	}
+}
+
+func (c *Client) RpcRequest(params RequestParams, target interface{}) error {
 	b, _ := json.Marshal(params)
 	bodyReader := strings.NewReader(string(b))
-	req, err := http.NewRequest("POST", url, bodyReader)
+	req, err := http.NewRequest("POST", c.Url, bodyReader)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
+	resp, err := c.HttpClient.Do(req)
 	if err != nil {
 		return err
 	}

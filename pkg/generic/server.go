@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
@@ -24,11 +23,10 @@ type callInfo struct {
 }
 
 type Server struct {
-	calls      map[string]callInfo
-	streams    []*ast.Stream
-	redisPool  *redis.Pool
-	httpClient *http.Client
-	url        string
+	calls     map[string]callInfo
+	streams   []*ast.Stream
+	redisPool *redis.Pool
+	rpcClient *rpc.Client
 }
 
 func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server, error) {
@@ -58,12 +56,12 @@ func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server
 			return nil, fmt.Errorf("Verification failure for stream %s: %s", stream.GetName(), err)
 		}
 	}
+	client := rpc.NewClient(rpcUrl)
 	return &Server{
-		calls:      calls,
-		streams:    root.GetStreams(),
-		redisPool:  redisPool,
-		httpClient: &http.Client{},
-		url:        rpcUrl,
+		calls:     calls,
+		streams:   root.GetStreams(),
+		redisPool: redisPool,
+		rpcClient: client,
 	}, nil
 }
 
@@ -109,7 +107,7 @@ func (s *Server) getCells(coreOutPoints *[]coretypes.OutPoint) ([]*rpctypes.OutP
 			[]string{txHashStr},
 		)
 		transactionWithStatus := rpctypes.TransactionWithStatusView{}
-		err := rpc.RpcRequest(s.httpClient, s.url, params, &transactionWithStatus)
+		err := s.rpcClient.RpcRequest(params, &transactionWithStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +124,7 @@ func (s *Server) getCells(coreOutPoints *[]coretypes.OutPoint) ([]*rpctypes.OutP
 			[]string{blockHashStr},
 		)
 		header := rpctypes.Header{}
-		err = rpc.RpcRequest(s.httpClient, s.url, blockParams, &header)
+		err = s.rpcClient.RpcRequest(blockParams, &header)
 		if err != nil {
 			return nil, err
 		}
