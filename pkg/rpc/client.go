@@ -79,7 +79,6 @@ func (c *Client) GetTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionWit
 	)
 	transactionWithStatus := rpctypes.TransactionWithStatusView{}
 	err := c.RpcRequest(params, &transactionWithStatus)
-	// transactionView := &transactionWithStatus.Transaction
 
 	return &transactionWithStatus, err
 }
@@ -108,7 +107,6 @@ func (c *Client) getTransactions(txHashes []rpctypes.Hash) ([]*rpctypes.Transact
 		}(txHash)
 	}
 
-	txMap := make(map[rpctypes.Hash]rpctypes.TransactionWithStatusView)
 	transactionWithStatusViews := []*rpctypes.TransactionWithStatusView{}
 	for i := 0; i < txHashLength; i++ {
 		txViewWithError := <-done
@@ -117,7 +115,6 @@ func (c *Client) getTransactions(txHashes []rpctypes.Hash) ([]*rpctypes.Transact
 			return nil, err
 		}
 		txWithStatusView := txViewWithError.TransactionWithStatusView
-		txMap[txWithStatusView.Transaction.Hash] = *txWithStatusView
 		transactionWithStatusViews = append(transactionWithStatusViews, txWithStatusView)
 
 		if i == txHashLength-1 {
@@ -152,4 +149,84 @@ func (c *Client) GetAllTransactions(txHashes []rpctypes.Hash, size int) ([]*rpct
 	}
 
 	return transactionWithStatusViews, nil
+}
+
+func (c *Client) GetHeader(blockHash *rpctypes.Hash) (*rpctypes.HeaderView, error) {
+	blockHashStr := fmt.Sprintf("0x%x", *blockHash)
+	params := NewRequestParams(
+		"get_header",
+		[]string{blockHashStr},
+	)
+	header := &rpctypes.HeaderView{}
+	err := c.RpcRequest(params, header)
+
+	return header, err
+}
+
+func (c *Client) getHeaders(blockHashes []rpctypes.Hash) ([]*rpctypes.HeaderView, error) {
+	blockHashLength := len(blockHashes)
+	if blockHashLength == 0 {
+		return []*rpctypes.HeaderView{}, nil
+	}
+
+	type headerWithError struct {
+		Header *rpctypes.HeaderView
+		Err    error
+	}
+
+	done := make(chan *headerWithError, blockHashLength)
+
+	for _, blockHash := range blockHashes {
+		go func(blockHash rpctypes.Hash) {
+			header, err := c.GetHeader(&blockHash)
+
+			done <- &headerWithError{
+				Header: header,
+				Err:    err,
+			}
+		}(blockHash)
+	}
+
+	headers := []*rpctypes.HeaderView{}
+	for i := 0; i < blockHashLength; i++ {
+		blockWithError := <-done
+		err := blockWithError.Err
+		if err != nil {
+			return nil, err
+		}
+		header := blockWithError.Header
+		headers = append(headers, header)
+
+		if i == blockHashLength-1 {
+			close(done)
+		}
+	}
+
+	return headers, nil
+}
+
+func (c *Client) GetAllHeaders(blockHashes []rpctypes.Hash, size int) ([]*rpctypes.HeaderView, error) {
+	var blockHashSlices [][]rpctypes.Hash
+	blockHashLength := len(blockHashes)
+	for i := 0; i < blockHashLength; i += size {
+		rightEdge := i + size
+		if rightEdge > blockHashLength {
+			rightEdge = blockHashLength
+		}
+		hashes := blockHashes[i:rightEdge]
+		blockHashSlices = append(blockHashSlices, hashes)
+	}
+
+	var headersResult []*rpctypes.HeaderView
+	for _, slice := range blockHashSlices {
+		headers, err := c.getHeaders(slice)
+		if err != nil {
+			return headers, err
+		}
+		for _, header := range headers {
+			headersResult = append(headersResult, header)
+		}
+	}
+
+	return headersResult, nil
 }

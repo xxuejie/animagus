@@ -96,47 +96,71 @@ type getCellsResponse struct {
 	GetCells []*rpctypes.OutPoint
 }
 
-func (s *Server) getCells(coreOutPoints *[]coretypes.OutPoint) ([]*rpctypes.OutPoint, error) {
-	var result []*rpctypes.OutPoint
-	for _, outPoint := range *coreOutPoints {
-		// get transaction
-		txHashStr := fmt.Sprintf("0x%x", outPoint.TxHash())
-		params := rpc.NewRequestParams(
-			"get_transaction",
-			[]string{txHashStr},
-		)
-		transactionWithStatus := rpctypes.TransactionWithStatusView{}
-		err := s.rpcClient.RpcRequest(params, &transactionWithStatus)
-		if err != nil {
-			return nil, err
+func (s *Server) getCells(coreOutPoints []coretypes.OutPoint) ([]*rpctypes.OutPoint, error) {
+	var rpcOutPoints []*rpctypes.OutPoint
+	set := make(map[rpctypes.Hash]int)
+
+	for _, coreOutPoint := range coreOutPoints {
+		txHash := []byte(coreOutPoint.TxHash())
+		var rpcTxHash rpctypes.Hash
+		copy(rpcTxHash[:], txHash)
+		rpcIndex := rpctypes.Uint32(coreOutPoint.Index())
+		rpcOutPoint := rpctypes.OutPoint{
+			TxHash: rpcTxHash,
+			Index:  rpcIndex,
 		}
+		rpcOutPoints = append(rpcOutPoints, &rpcOutPoint)
+		set[rpcTxHash] = 1
+	}
+
+	var txHashes []rpctypes.Hash
+	for key := range set {
+		txHashes = append(txHashes, key)
+	}
+
+	transactionWithStatusViews, err := s.rpcClient.GetAllTransactions(txHashes, 50)
+	if err != nil {
+		return nil, err
+	}
+
+	txWithStatusMap := make(map[rpctypes.Hash]*rpctypes.TransactionWithStatusView)
+	blockHashSet := make(map[rpctypes.Hash]int)
+	for _, txWithStatusView := range transactionWithStatusViews {
+		txWithStatusMap[txWithStatusView.Transaction.Hash] = txWithStatusView
+		blockHashSet[*txWithStatusView.TxStatus.BlockHash] = 1
+	}
+	var blockHashes []rpctypes.Hash
+	for key := range blockHashSet {
+		blockHashes = append(blockHashes, key)
+	}
+	headers, err := s.rpcClient.GetAllHeaders(blockHashes, 50)
+	if err != nil {
+		return nil, err
+	}
+	headerMap := make(map[rpctypes.Hash]*rpctypes.Header)
+	for _, header := range headers {
+		headerMap[header.Hash] = &header.Header
+	}
+
+	var result []*rpctypes.OutPoint
+	for _, outPoint := range rpcOutPoints {
+		// get transaction
+		transactionWithStatus := txWithStatusMap[outPoint.TxHash]
 		transactionView := &transactionWithStatus.Transaction
-		index := outPoint.Index()
+
+		index := outPoint.Index
 		cell := transactionView.Outputs[index]
 		originData := &transactionView.OutputsData[index]
 		raw := rpctypes.Raw([]byte(*originData))
 
 		// get header
-		blockHashStr := fmt.Sprintf("0x%x", *transactionWithStatus.TxStatus.BlockHash)
-		blockParams := rpc.NewRequestParams(
-			"get_header",
-			[]string{blockHashStr},
-		)
-		header := rpctypes.Header{}
-		err = s.rpcClient.RpcRequest(blockParams, &header)
-		if err != nil {
-			return nil, err
-		}
-		txHash := []byte(outPoint.TxHash())
-		var resultTxHash rpctypes.Hash
-		copy(resultTxHash[:], txHash)
-		resultIndex := rpctypes.Uint32(outPoint.Index())
+		header := headerMap[*transactionWithStatus.TxStatus.BlockHash]
 		resultOutPoint := rpctypes.OutPoint{
-			TxHash:   resultTxHash,
-			Index:    resultIndex,
+			TxHash:   outPoint.TxHash,
+			Index:    outPoint.Index,
 			Cell:     &cell,
 			CellData: &raw,
-			Header:   &header,
+			Header:   header,
 		}
 		result = append(result, &resultOutPoint)
 	}
@@ -172,7 +196,7 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 			return nil, fmt.Errorf("OutPoint %x verification failure!", slice)
 		}
 	}
-	resultCells, err := e.s.getCells(&outPoints)
+	resultCells, err := e.s.getCells(outPoints)
 	if err != nil {
 		return nil, err
 	}
