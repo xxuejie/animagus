@@ -86,10 +86,6 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Index
 	}, nil
 }
 
-type getBlockResponse struct {
-	GetBlock *rpctypes.BlockView
-}
-
 func (i *Indexer) Run() error {
 	redisConn := i.redisPool.Get()
 	defer redisConn.Close()

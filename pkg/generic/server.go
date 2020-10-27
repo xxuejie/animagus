@@ -92,10 +92,6 @@ func (e executeEnvironment) IndexParam(i int, value *ast.Value) error {
 	return fmt.Errorf("Indexing param is not allowed when executing!")
 }
 
-type getCellsResponse struct {
-	GetCells []*rpctypes.OutPoint
-}
-
 func (s *Server) getCells(coreOutPoints []coretypes.OutPoint) ([]*rpctypes.OutPoint, error) {
 	var rpcOutPoints []*rpctypes.OutPoint
 	set := make(map[rpctypes.Hash]int)
