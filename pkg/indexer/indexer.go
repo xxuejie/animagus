@@ -67,12 +67,7 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Index
 	// Test rpc
 	client := rpc.NewClient(rpcUrl)
 
-	params := rpc.NewRequestParams(
-		"get_tip_block_number",
-		[]string{},
-	)
-	var blockNumber string
-	err = client.RpcRequest(params, &blockNumber)
+	_, err = client.GetTipBlockNumber()
 	if err != nil {
 		return nil, err
 	}
@@ -154,14 +149,13 @@ func (i *Indexer) Run() error {
 }
 
 func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
-	params := rpc.NewRequestParams(
-		"get_block_by_number",
-		[]string{fmt.Sprintf("0x%x", blockNumber)},
-	)
-	blockView := rpctypes.BlockView{}
-	err := i.rpcClient.RpcRequest(params, &blockView)
+	blockView, err := i.rpcClient.GetBlockByNumber(rpctypes.Uint64(blockNumber))
 	if err != nil {
 		return nil, err
+	}
+
+	if blockView == nil {
+		return nil, nil
 	}
 
 	var emptyHash rpctypes.Hash
@@ -217,7 +211,7 @@ func (i *Indexer) queryBlock(blockNumber uint64) (*rpctypes.BlockView, error) {
 		}
 	}
 
-	return &blockView, err
+	return blockView, err
 }
 
 func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) error {

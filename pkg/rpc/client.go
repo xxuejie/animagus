@@ -16,6 +16,26 @@ type responseBody struct {
 	Result  interface{} `json:"result"`
 }
 
+type blockResponseBody struct {
+	responseBody
+	Result *rpctypes.BlockView `json:"result"`
+}
+
+type headerResponseBody struct {
+	responseBody
+	Result *rpctypes.HeaderView `json:"result"`
+}
+
+type transactionWithStatusResponseBody struct {
+	responseBody
+	Result *rpctypes.TransactionWithStatusView `json:"result"`
+}
+
+type blockNumberResponseBody struct {
+	responseBody
+	Result *rpctypes.Uint64 `json:"result"`
+}
+
 type RequestParams struct {
 	ID      int      `json:"id"`
 	Jsonrpc string   `json:"jsonrpc"`
@@ -49,26 +69,63 @@ func NewClient(url string) *Client {
 	}
 }
 
-func (c *Client) RpcRequest(params RequestParams, target interface{}) error {
+func (c *Client) rpcRequest(params RequestParams) ([]byte, error) {
 	b, _ := json.Marshal(params)
 	bodyReader := strings.NewReader(string(b))
 	req, err := http.NewRequest("POST", c.Url, bodyReader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.HttpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	result, _ := ioutil.ReadAll(resp.Body)
+	result, err := ioutil.ReadAll(resp.Body)
 
-	hr := &responseBody{Result: &target}
+	return result, err
+}
 
-	e := json.Unmarshal(result, hr)
-	return e
+func (c *Client) GetTipBlockNumber() (*rpctypes.Uint64, error) {
+	params := NewRequestParams(
+		"get_tip_block_number",
+		[]string{},
+	)
+
+	result, err := c.rpcRequest(params)
+
+	if err != nil {
+		return nil, err
+	}
+
+	rb := &blockNumberResponseBody{}
+	err = json.Unmarshal(result, rb)
+	if err != nil {
+		return nil, err
+	}
+	return rb.Result, nil
+}
+
+func (c *Client) GetBlockByNumber(blockNumber rpctypes.Uint64) (*rpctypes.BlockView, error) {
+	params := NewRequestParams(
+		"get_block_by_number",
+		[]string{blockNumber.EncodeToString()},
+	)
+
+	result, err := c.rpcRequest(params)
+
+	if err != nil {
+		return nil, err
+	}
+
+	rb := &blockResponseBody{}
+	err = json.Unmarshal(result, rb)
+	if err != nil {
+		return nil, err
+	}
+	return rb.Result, nil
 }
 
 func (c *Client) GetTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionWithStatusView, error) {
@@ -77,10 +134,23 @@ func (c *Client) GetTransaction(txHash *rpctypes.Hash) (*rpctypes.TransactionWit
 		"get_transaction",
 		[]string{txHashStr},
 	)
-	transactionWithStatus := rpctypes.TransactionWithStatusView{}
-	err := c.RpcRequest(params, &transactionWithStatus)
 
-	return &transactionWithStatus, err
+	result, err := c.rpcRequest(params)
+
+	if err != nil {
+		return nil, err
+	}
+
+	rb := &transactionWithStatusResponseBody{}
+	err = json.Unmarshal(result, rb)
+
+	if err != nil {
+		return nil, err
+	}
+
+	transactionWithStatus := rb.Result
+
+	return transactionWithStatus, nil
 }
 
 func (c *Client) getTransactions(txHashes []rpctypes.Hash) ([]*rpctypes.TransactionWithStatusView, error) {
@@ -157,8 +227,19 @@ func (c *Client) GetHeader(blockHash *rpctypes.Hash) (*rpctypes.HeaderView, erro
 		"get_header",
 		[]string{blockHashStr},
 	)
-	header := &rpctypes.HeaderView{}
-	err := c.RpcRequest(params, header)
+
+	result, err := c.rpcRequest(params)
+	if err != nil {
+		return nil, err
+	}
+
+	rb := &headerResponseBody{}
+	err = json.Unmarshal(result, rb)
+	if err != nil {
+		return nil, err
+	}
+
+	header := rb.Result
 
 	return header, err
 }
