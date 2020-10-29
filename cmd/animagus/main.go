@@ -15,7 +15,7 @@ import (
 
 var astFile = flag.String("astFile", "./ast.bin", "AST file to load")
 var redisUrl = flag.String("redisUrl", "redis://127.0.0.1:6379", "Redis URL")
-var graphqlUrl = flag.String("graphqlUrl", "http://127.0.0.1:3001/graphql", "Redis URL")
+var rpcUrl = flag.String("rpcUrl", "http://127.0.0.1:8114", "CKB RPC URL")
 var grpcListenAddress = flag.String("grpcListenAddress", ":4000", "GRPC Listen Address")
 
 func main() {
@@ -31,12 +31,12 @@ func main() {
 		Dial:        func() (redis.Conn, error) { return redis.DialURL(*redisUrl) },
 	}
 	// TODO: multiple call support later
-	i, err := indexer.NewIndexer(astContent, redisPool, *graphqlUrl)
+	i, err := indexer.NewIndexer(astContent, redisPool, *rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	genericServer, err := generic.NewServer(astContent, redisPool, *graphqlUrl)
+	genericServer, err := generic.NewServer(astContent, redisPool, *rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}

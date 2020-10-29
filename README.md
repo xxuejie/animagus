@@ -26,7 +26,6 @@ We've packed a small [example](https://github.com/xxuejie/animagus/tree/develop/
 Animagus requires the following dependencies:
 
 * [CKB](https://github.com/nervosnetwork/ckb)
-* [ckb-graphql-server](https://github.com/xxuejie/ckb-graphql-server)
 * [Redis](https://redis.io/)
 
 Animagus is compatible with latest lina mainnet version of CKB. Below I'm building and launching CKB from source, but you can also use precompiled binaries:
@@ -39,17 +38,6 @@ $ cd ckb
 $ cargo build --release
 $ target/release/ckb init -C mainnet -c mainnet
 $ target/release/ckb run -C mainnet
-```
-
-Now we can run the GraphQL server:
-
-```
-$ mkdir -p /tmp/animagus-demo
-$ cd /tmp/animagus-demo
-$ git clone https://github.com/xxuejie/ckb-graphql-server
-$ cd ckb-graphql-server
-$ cargo build --release
-$ target/release/ckb-graphql-server --db ../ckb/mainnet/data/db --listen 0.0.0.0:3001
 ```
 
 I'm using docker to quickly start that a temporary Redis server, but you can also using other ways to launch Redis:
@@ -77,7 +65,7 @@ $ go build ./cmd/animagus
 $ ./animagus -astFile=./examples/balance/balance.bin
 ```
 
-Notice if you use different ports for GraphQL server and Redis, you might need to tweak animagus start flags, see `./animagus --help` for details
+Notice if you use different ports for CKB RPC server and Redis, you might need to tweak animagus start flags, see `./animagus --help` for details
 
 You will notice logs since animagus is indexing cells. We have prepared a small [file](https://github.com/xxuejie/animagus/blob/develop/examples/balance/call_balance.rb) that you can use to check balances. Given the `args` part in a lock script, this file queries against animagus for the current balance of that account:
 

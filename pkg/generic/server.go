@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/gomodule/redigo/redis"
-	"github.com/machinebox/graphql"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/coretypes"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/indexer"
+	"github.com/xxuejie/animagus/pkg/rpc"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
 	"github.com/xxuejie/animagus/pkg/verifier"
 )
@@ -23,13 +22,13 @@ type callInfo struct {
 }
 
 type Server struct {
-	calls         map[string]callInfo
-	streams       []*ast.Stream
-	redisPool     *redis.Pool
-	graphqlClient *graphql.Client
+	calls     map[string]callInfo
+	streams   []*ast.Stream
+	redisPool *redis.Pool
+	rpcClient *rpc.Client
 }
 
-func NewServer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Server, error) {
+func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server, error) {
 	root := &ast.Root{}
 	err := proto.Unmarshal(astContent, root)
 	if err != nil {
@@ -56,12 +55,12 @@ func NewServer(astContent []byte, redisPool *redis.Pool, graphqlUrl string) (*Se
 			return nil, fmt.Errorf("Verification failure for stream %s: %s", stream.GetName(), err)
 		}
 	}
-	client := graphql.NewClient(graphqlUrl)
+	client := rpc.NewClient(rpcUrl)
 	return &Server{
-		calls:         calls,
-		streams:       root.GetStreams(),
-		redisPool:     redisPool,
-		graphqlClient: client,
+		calls:     calls,
+		streams:   root.GetStreams(),
+		redisPool: redisPool,
+		rpcClient: client,
 	}, nil
 }
 
@@ -93,8 +92,75 @@ func (e executeEnvironment) IndexParam(i int, value *ast.Value) error {
 	return fmt.Errorf("Indexing param is not allowed when executing!")
 }
 
-type getCellsResponse struct {
-	GetCells []*rpctypes.OutPoint
+func (s *Server) getCells(coreOutPoints []coretypes.OutPoint) ([]*rpctypes.OutPoint, error) {
+	var rpcOutPoints []*rpctypes.OutPoint
+	set := make(map[rpctypes.Hash]int)
+
+	for _, coreOutPoint := range coreOutPoints {
+		txHash := []byte(coreOutPoint.TxHash())
+		var rpcTxHash rpctypes.Hash
+		copy(rpcTxHash[:], txHash)
+		rpcIndex := rpctypes.Uint32(coreOutPoint.Index())
+		rpcOutPoint := rpctypes.OutPoint{
+			TxHash: rpcTxHash,
+			Index:  rpcIndex,
+		}
+		rpcOutPoints = append(rpcOutPoints, &rpcOutPoint)
+		set[rpcTxHash] = 1
+	}
+
+	var txHashes []rpctypes.Hash
+	for key := range set {
+		txHashes = append(txHashes, key)
+	}
+
+	transactionWithStatusViews, err := s.rpcClient.GetAllTransactions(txHashes, 50)
+	if err != nil {
+		return nil, err
+	}
+
+	txWithStatusMap := make(map[rpctypes.Hash]*rpctypes.TransactionWithStatusView)
+	blockHashSet := make(map[rpctypes.Hash]int)
+	for _, txWithStatusView := range transactionWithStatusViews {
+		txWithStatusMap[txWithStatusView.Transaction.Hash] = txWithStatusView
+		blockHashSet[*txWithStatusView.TxStatus.BlockHash] = 1
+	}
+	var blockHashes []rpctypes.Hash
+	for key := range blockHashSet {
+		blockHashes = append(blockHashes, key)
+	}
+	headers, err := s.rpcClient.GetAllHeaders(blockHashes, 50)
+	if err != nil {
+		return nil, err
+	}
+	headerMap := make(map[rpctypes.Hash]*rpctypes.Header)
+	for _, header := range headers {
+		headerMap[header.Hash] = &header.Header
+	}
+
+	var result []*rpctypes.OutPoint
+	for _, outPoint := range rpcOutPoints {
+		// get transaction
+		transactionWithStatus := txWithStatusMap[outPoint.TxHash]
+		transactionView := &transactionWithStatus.Transaction
+
+		index := outPoint.Index
+		cell := transactionView.Outputs[index]
+		originData := &transactionView.OutputsData[index]
+		raw := rpctypes.Raw([]byte(*originData))
+
+		// get header
+		header := headerMap[*transactionWithStatus.TxStatus.BlockHash]
+		resultOutPoint := rpctypes.OutPoint{
+			TxHash:   outPoint.TxHash,
+			Index:    outPoint.Index,
+			Cell:     &cell,
+			CellData: &raw,
+			Header:   header,
+		}
+		result = append(result, &resultOutPoint)
+	}
+	return result, nil
 }
 
 func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
@@ -126,60 +192,15 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 			return nil, fmt.Errorf("OutPoint %x verification failure!", slice)
 		}
 	}
-	req := graphql.NewRequest(fmt.Sprintf(`
-query {
-  getCells(outPoints: %s, skipMissing: true) {
-    cell {
-      capacity
-      lock {
-        code_hash
-        hash_type
-        args
-      }
-      type {
-        code_hash
-        hash_type
-        args
-      }
-    }
-    cell_data {
-      content
-    }
-    tx_hash
-    index
-    header {
-      compact_target
-      parent_hash
-      timestamp
-      number
-      epoch
-      transactions_root
-      proposals_hash
-      uncles_hash
-      dao
-      nonce
-    }
-  }
-}
-`, assembleQueryString(outPoints)))
-	var response getCellsResponse
-	err = e.s.graphqlClient.Run(context.Background(), req, &response)
+	resultCells, err := e.s.getCells(outPoints)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]*ast.Value, len(response.GetCells))
-	for i, cell := range response.GetCells {
-		results[i] = ast.ConvertCell(*cell.GraphqlCell, *cell.GraphqlCellData.Content, *cell, cell.GraphqlHeader)
+	results := make([]*ast.Value, len(resultCells))
+	for i, cell := range resultCells {
+		results[i] = ast.ConvertCell(*cell.Cell, *cell.CellData, *cell, cell.Header)
 	}
 	return results, nil
-}
-
-func assembleQueryString(outPoints []coretypes.OutPoint) string {
-	pieces := make([]string, len(outPoints))
-	for i, outPoint := range outPoints {
-		pieces[i] = fmt.Sprintf("{txHash: \"0x%x\", index: \"0x%x\"}", outPoint.TxHash(), outPoint.Index())
-	}
-	return fmt.Sprintf("[%s]", strings.Join(pieces, ", "))
 }
 
 func (s *Server) Call(ctx context.Context, p *GenericParams) (*ast.Value, error) {
