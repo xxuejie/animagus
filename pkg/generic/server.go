@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/gomodule/redigo/redis"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/coretypes"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/indexer"
 	"github.com/xxuejie/animagus/pkg/rpc"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
+	"github.com/xxuejie/animagus/pkg/store"
 	"github.com/xxuejie/animagus/pkg/verifier"
 )
 
@@ -22,13 +23,13 @@ type callInfo struct {
 }
 
 type Server struct {
-	calls     map[string]callInfo
-	streams   []*ast.Stream
-	redisPool *redis.Pool
-	rpcClient *rpc.Client
+	calls       map[string]callInfo
+	streams     []*ast.Stream
+	storeClient *store.Client
+	rpcClient   *rpc.Client
 }
 
-func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server, error) {
+func NewServer(astContent []byte, storeClient *store.Client, rpcUrl string) (*Server, error) {
 	root := &ast.Root{}
 	err := proto.Unmarshal(astContent, root)
 	if err != nil {
@@ -57,10 +58,10 @@ func NewServer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Server
 	}
 	client := rpc.NewClient(rpcUrl)
 	return &Server{
-		calls:     calls,
-		streams:   root.GetStreams(),
-		redisPool: redisPool,
-		rpcClient: client,
+		calls:       calls,
+		streams:     root.GetStreams(),
+		storeClient: storeClient,
+		rpcClient:   client,
 	}, nil
 }
 
@@ -176,9 +177,7 @@ func (e executeEnvironment) QueryCell(query *ast.Value) ([]*ast.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn := e.s.redisPool.Get()
-	defer conn.Close()
-	slices, err := redis.ByteSlices(conn.Do("SMEMBERS", indexKey))
+	slices, err := e.s.storeClient.Sget(indexKey)
 	if err != nil {
 		return nil, err
 	}
@@ -228,35 +227,34 @@ func (s *Server) Stream(p *GenericParams, streamServer GenericService_StreamServ
 		return fmt.Errorf("Calling non-exist stream: %s", p.GetName())
 	}
 
-	psc := redis.PubSubConn{Conn: s.redisPool.Get()}
-	defer psc.Close()
-
 	key := fmt.Sprintf("STREAM:%s", selectedStream.GetName())
-	err := psc.Subscribe(key)
+
+	var eofError error
+	callbackFunc := func(data []byte) {
+		value := &ast.Value{}
+
+		err := proto.Unmarshal(data, value)
+		if err != nil {
+			return
+		}
+		err = streamServer.Send(value)
+		if err == io.EOF {
+			eofError = err
+			return
+		}
+	}
+
+	err := store.Bus.Subscribe(key, callbackFunc)
 	if err != nil {
 		return err
 	}
+
 	for {
-		switch v := psc.Receive().(type) {
-		case redis.Message:
-			if v.Channel == key {
-				value := &ast.Value{}
-				err = proto.Unmarshal(v.Data, value)
-				if err != nil {
-					break
-				}
-				err = streamServer.Send(value)
-				if err == io.EOF {
-					return psc.Unsubscribe()
-				}
-				if err != nil {
-					break
-				}
-			}
-		case error:
-			return v
+		time.Sleep(500 * time.Millisecond)
+		if eofError != nil {
+			return store.Bus.Unsubscribe(key, callbackFunc)
 		}
 	}
-	psc.Unsubscribe()
-	return err
+
+	return store.Bus.Unsubscribe(key, callbackFunc)
 }

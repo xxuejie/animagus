@@ -9,27 +9,28 @@ import (
 	"log"
 	"time"
 
+	badger "github.com/dgraph-io/badger/v2"
 	"github.com/golang/protobuf/proto"
-	"github.com/gomodule/redigo/redis"
 	blake2b "github.com/minio/blake2b-simd"
 	"github.com/xxuejie/animagus/pkg/ast"
 	"github.com/xxuejie/animagus/pkg/executor"
 	"github.com/xxuejie/animagus/pkg/rpc"
 	"github.com/xxuejie/animagus/pkg/rpctypes"
+	"github.com/xxuejie/animagus/pkg/store"
 	"github.com/xxuejie/animagus/pkg/verifier"
 )
 
 const Version string = "0.0.1"
 
 type Indexer struct {
-	hash      []byte
-	values    []ValueContext
-	streams   []*ast.Stream
-	redisPool *redis.Pool
-	rpcClient *rpc.Client
+	hash        []byte
+	values      []ValueContext
+	streams     []*ast.Stream
+	storeClient *store.Client
+	rpcClient   *rpc.Client
 }
 
-func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Indexer, error) {
+func NewIndexer(astContent []byte, storeClient *store.Client, rpcUrl string) (*Indexer, error) {
 	root := &ast.Root{}
 	err := proto.Unmarshal(astContent, root)
 	if err != nil {
@@ -73,25 +74,22 @@ func NewIndexer(astContent []byte, redisPool *redis.Pool, rpcUrl string) (*Index
 	}
 
 	return &Indexer{
-		values:    values,
-		hash:      hash,
-		redisPool: redisPool,
-		rpcClient: client,
-		streams:   root.GetStreams(),
+		values:      values,
+		hash:        hash,
+		storeClient: storeClient,
+		rpcClient:   client,
+		streams:     root.GetStreams(),
 	}, nil
 }
 
 func (i *Indexer) Run() error {
-	redisConn := i.redisPool.Get()
-	defer redisConn.Close()
-
-	dbHash, err := redis.Bytes(redisConn.Do("GET", "AST_HASH"))
-	if err != nil && err != redis.ErrNil {
+	dbHash, err := i.storeClient.Get("AST_HASH")
+	if err != nil {
 		return err
 	}
 	if len(dbHash) == 0 {
 		dbHash = i.hash
-		_, err = redisConn.Do("SET", "AST_HASH", dbHash)
+		err = i.storeClient.Set("AST_HASH", dbHash)
 		if err != nil {
 			return err
 		}
@@ -102,8 +100,8 @@ func (i *Indexer) Run() error {
 	for {
 		var blockToFetch uint64
 		var lastBlockHash []byte
-		lastBlock, err := redis.Bytes(redisConn.Do("GET", "LAST_BLOCK"))
-		if err != nil && err != redis.ErrNil {
+		lastBlock, err := i.storeClient.Get("LAST_BLOCK")
+		if err != nil {
 			return err
 		}
 		if len(lastBlock) == 40 {
@@ -140,7 +138,7 @@ func (i *Indexer) Run() error {
 		if err != nil {
 			return err
 		}
-		err = commands.execute(redisConn)
+		err = commands.execute(i.storeClient)
 		if err != nil {
 			return err
 		}
@@ -275,11 +273,8 @@ func (i *Indexer) indexBlock(block rpctypes.BlockView, commands *commandBuffer) 
 }
 
 func (i *Indexer) revertBlock(blockNumber uint64) error {
-	conn := i.redisPool.Get()
-	defer conn.Close()
-
 	revertKey := fmt.Sprintf("BLOCK:%d:REVERT_COMMANDS", blockNumber)
-	revertData, err := redis.Bytes(conn.Do("GET", revertKey))
+	revertData, err := i.storeClient.Get(revertKey)
 	if err != nil {
 		return err
 	}
@@ -295,11 +290,16 @@ func (i *Indexer) revertBlock(blockNumber uint64) error {
 		return err
 	}
 
-	conn.Send("MULTI")
-	for _, command := range revertCommands {
-		conn.Send(command.Name, command.Args...)
-	}
-	_, err = conn.Do("EXEC")
+	err = i.storeClient.DB.Update(func(txn *badger.Txn) error {
+		for _, command := range revertCommands {
+			errr := store.Do(txn, command.Name, command.Args...)
+			if errr != nil {
+				return errr
+			}
+		}
+		return nil
+	})
+
 	return err
 }
 
@@ -438,7 +438,7 @@ func (c *commandBuffer) revertStreamValue(name string, value []byte) {
 	c.streamRevertDo("PUBLISH", key, value)
 }
 
-func (c *commandBuffer) execute(conn redis.Conn) error {
+func (c *commandBuffer) execute(storeClient *store.Client) error {
 	if c.err != nil {
 		return c.err
 	}
@@ -463,12 +463,17 @@ func (c *commandBuffer) execute(conn redis.Conn) error {
 		return err
 	}
 
-	conn.Send("MULTI")
-	for _, command := range c.commands {
-		conn.Send(command.Name, command.Args...)
-	}
-	conn.Send("SET", c.revertKey, buf.Bytes())
-	_, err = conn.Do("EXEC")
+	err = storeClient.DB.Update(func(txn *badger.Txn) error {
+		for _, command := range c.commands {
+			errr := store.Do(txn, command.Name, command.Args...)
+			if errr != nil {
+				return errr
+			}
+		}
+		errr := store.Do(txn, "SET", c.revertKey, buf.Bytes())
+		return errr
+	})
+
 	return err
 }
 
