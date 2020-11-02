@@ -25,6 +25,14 @@ func (c *Client) Open() error {
 	return err
 }
 
+// for test
+func (c *Client) openInMemory() error {
+	var err error
+	opt := badger.DefaultOptions("").WithInMemory(true)
+	c.DB, err = badger.Open(opt)
+	return err
+}
+
 func (c *Client) Close() error {
 	if c.DB != nil {
 		return c.DB.Close()
