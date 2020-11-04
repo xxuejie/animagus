@@ -5,16 +5,16 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"time"
 
-	"github.com/gomodule/redigo/redis"
 	"github.com/xxuejie/animagus/pkg/generic"
 	"github.com/xxuejie/animagus/pkg/indexer"
+	"github.com/xxuejie/animagus/pkg/store"
 	"google.golang.org/grpc"
 )
 
 var astFile = flag.String("astFile", "./ast.bin", "AST file to load")
-var redisUrl = flag.String("redisUrl", "redis://127.0.0.1:6379", "Redis URL")
+
+var dataDir = flag.String("dataDir", "./badgerdb", "DB dir")
 var rpcUrl = flag.String("rpcUrl", "http://127.0.0.1:8114", "CKB RPC URL")
 var grpcListenAddress = flag.String("grpcListenAddress", ":4000", "GRPC Listen Address")
 
@@ -25,18 +25,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	redisPool := &redis.Pool{
-		MaxIdle:     2,
-		IdleTimeout: 60 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.DialURL(*redisUrl) },
+
+	storeClient := store.NewClient(*dataDir)
+	err = storeClient.Open()
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer storeClient.Close()
+
 	// TODO: multiple call support later
-	i, err := indexer.NewIndexer(astContent, redisPool, *rpcUrl)
+	i, err := indexer.NewIndexer(astContent, storeClient, *rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	genericServer, err := generic.NewServer(astContent, redisPool, *rpcUrl)
+	genericServer, err := generic.NewServer(astContent, storeClient, *rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
